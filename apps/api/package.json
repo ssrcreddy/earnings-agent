@@ -1,0 +1,35 @@
+{
+  "name": "@eia/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "dev:http": "tsx watch src/main.ts http",
+    "dev:worker": "tsx watch src/main.ts worker",
+    "seed": "tsx src/seed.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@eia/db": "workspace:*",
+    "@eia/shared": "workspace:*",
+    "bottleneck": "2.19.5",
+    "cheerio": "1.2.0",
+    "decimal.js": "10.6.0",
+    "dotenv": "18.0.9",
+    "drizzle-orm": "0.45.4",
+    "fastify": "5.12.7",
+    "luxon": "3.7.2",
+    "pg": "8.23.1",
+    "pg-boss": "12.38.0",
+    "pino": "10.4.0",
+    "tsx": "4.23.15",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/luxon": "3.7.6",
+    "@types/pg": "8.23.1",
+    "pino-pretty": "13.2.0"
+  }
+}

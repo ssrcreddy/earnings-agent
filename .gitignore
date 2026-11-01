@@ -1,0 +1,11 @@
+node_modules/
+.next/
+dist/
+coverage/
+.env
+*.log
+data/raw/*
+!data/raw/.gitkeep
+data/eval-reports/*
+!data/eval-reports/.gitkeep
+data/cache/

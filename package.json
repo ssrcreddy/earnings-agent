@@ -1,0 +1,29 @@
+{
+  "name": "earnings-intelligence-agent",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "dev:api": "pnpm --filter @eia/api dev:http",
+    "dev:worker": "pnpm --filter @eia/api dev:worker",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d db",
+    "db:generate": "pnpm --filter @eia/db generate",
+    "db:migrate": "pnpm --filter @eia/db migrate",
+    "seed": "pnpm --filter @eia/api seed",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "eval": "tsx scripts/eval.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.0.5"
+  }
+}
