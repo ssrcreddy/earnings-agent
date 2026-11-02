@@ -89,6 +89,13 @@ export function quarterReportedBy(filingDate: Date, fiscalYearEnd: string): Fisc
   return latest;
 }
 
+/** Nominal end date of a fiscal quarter label ("2026-Q2"), for matching XBRL facts by period. */
+export function nominalEndOf(label: string, fiscalYearEnd: string): Date {
+  const m = /^(\d{4})-Q([1-4])$/.exec(label);
+  if (!m) throw new Error(`Not a fiscal quarter label: "${label}"`);
+  return nominalQuarterEnd(Number(m[1]), Number(m[2]) as 1 | 2 | 3 | 4, parseFye(fiscalYearEnd));
+}
+
 /** "2026-FY" for a full-year target in fiscal year 2026. */
 export function fiscalYearLabel(fiscalYear: number): string {
   return `${fiscalYear}-FY`;

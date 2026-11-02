@@ -1,12 +1,12 @@
-// Integration test: discover -> ingest -> parse -> Ask against the real test database, EDGAR served
-// from fixtures, a deterministic embedder, and a fake LLM. Covers the Phase 1 and Phase 2 exit
-// tests and the idempotency spot-check from the §25 acceptance list.
+// Integration test: discover -> ingest -> parse -> Ask -> extract -> review against the real test
+// database, EDGAR served from fixtures, a deterministic embedder, and a fake LLM. Covers the Phase 1-3
+// exit tests and the idempotency spot-check from the §25 acceptance list.
 import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chunks, companies, documents, earningsEvents, llmCalls } from "@eia/db";
+import { chunks, companies, documents, earningsEvents, guidance, llmCalls, metrics, reviewItems } from "@eia/db";
 import { runMigrations } from "@eia/db/migrate";
 import { and, count, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import pino from "pino";
@@ -15,16 +15,51 @@ import { loadConfig } from "../src/config";
 import { closeContext, createContext, type AppContext } from "../src/context";
 import { discoverJob } from "../src/jobs/discover";
 import { ingestJob } from "../src/jobs/ingest";
+import { extractJob } from "../src/jobs/extract";
 import { parseJob } from "../src/jobs/parse";
 import { HashEmbedder } from "../src/llm/embedder";
-import type { OpenAILike, ResponseStreamEvent } from "../src/llm/gateway";
+import type { OpenAILike, ResponseObject, ResponseStreamEvent } from "../src/llm/gateway";
 import { Q, createQueues, type DocumentPayload, type IngestPayload } from "../src/queues";
 import { buildServer } from "../src/server";
 import { ask, type AskEvent } from "../src/services/ask";
 import { addCompany } from "../src/services/companies";
 
-/** Fake OpenAI client: records the Ask request and streams a fixed, cited answer. */
+/** The VST Q2 2026 headline-table row: $305M this quarter, $327M a year ago, $1,334M six months. */
+const NET_INCOME_ROW = "Net income | $305 | $327 | $1,334 | $59";
+const FCF_GUIDE =
+  "Ongoing Operations Adjusted FCFbG1 guidance ranges of $6.8 billion to $7.6 billion and $3.925 billion to $4.725 billion";
+
+/**
+ * What the fake model "extracts" from the press release - the same both attempts, like a stubborn model:
+ * - net income read from the prior-year column (327): in its quote, but the headline table says 305
+ * - six-month net income at low confidence: valid, but goes to review as pending
+ * - operating income with a made-up quote: fails the quote check
+ * - adjusted FCF guidance range: valid and confident
+ */
+const PRESS_RELEASE_EXTRACTION = {
+  metrics: [
+    { name: "net_income", segment: null, value: 327e6, unit: "usd", periodType: "quarter", quote: NET_INCOME_ROW, confidence: 0.9 },
+    { name: "net_income", segment: null, value: 1334e6, unit: "usd", periodType: "ytd", quote: NET_INCOME_ROW, confidence: 0.6 },
+    {
+      name: "op_income",
+      segment: null,
+      value: 512e6,
+      unit: "usd",
+      periodType: "quarter",
+      quote: "Operating income was $512 million in the second quarter",
+      confidence: 0.9,
+    },
+  ],
+  guidance: [
+    { metric: "fcf", kind: "range", low: 3.925e9, high: 4.725e9, targetPeriod: "2026-FY", quote: FCF_GUIDE, confidence: 0.92 },
+  ],
+};
+
+const isTenQ = (body: Record<string, unknown>) => String(body.input).includes("\nDocument: Form 10-Q\n");
+
+/** Fake OpenAI client: streams a fixed cited answer for Ask; returns fixed structured output for extraction. */
 let lastResponsesRequest: Record<string, unknown> | null = null;
+const extractRequests: Record<string, unknown>[] = [];
 const fakeLlm: OpenAILike = {
   embeddings: {
     async create({ input }) {
@@ -32,14 +67,26 @@ const fakeLlm: OpenAILike = {
     },
   },
   responses: {
-    async create(body) {
-      lastResponsesRequest = body;
-      return (async function* (): AsyncGenerator<ResponseStreamEvent> {
-        yield { type: "response.output_text.delta", delta: "Vistra discussed maintenance " };
-        yield { type: "response.output_text.delta", delta: "capital expenditures [C1]." };
-        yield { type: "response.completed", response: { usage: { input_tokens: 1200, output_tokens: 12 } } };
-      })();
-    },
+    create: (async (body: Record<string, unknown>) => {
+      if (body.stream) {
+        lastResponsesRequest = body;
+        return (async function* (): AsyncGenerator<ResponseStreamEvent> {
+          yield { type: "response.output_text.delta", delta: "Vistra discussed maintenance " };
+          yield { type: "response.output_text.delta", delta: "capital expenditures [C1]." };
+          yield { type: "response.completed", response: { usage: { input_tokens: 1200, output_tokens: 12 } } };
+        })();
+      }
+      extractRequests.push(body);
+      // Decide by the request header: the release itself mentions "Form 10-Q" in its boilerplate.
+      const result = isTenQ(body) ? { metrics: [], guidance: [] } : PRESS_RELEASE_EXTRACTION;
+      const res: ResponseObject = {
+        status: "completed",
+        output_text: JSON.stringify(result),
+        output: [],
+        usage: { input_tokens: 5000, output_tokens: 300 },
+      };
+      return res;
+    }) as OpenAILike["responses"]["create"],
   },
 };
 
@@ -71,6 +118,7 @@ async function fixtureFetcher(url: string): Promise<Response> {
   if (url.endsWith("0001692819-26-000019-index.htm")) return html(read("filing_index_VST_10q.htm"));
   if (url.endsWith("vistra-20260630xearningsre.htm")) return html(pressRelease);
   if (url.includes("/Archives/edgar/data/1692819/000169281926000019/")) return html("<html><body>10-Q</body></html>");
+  if (url.endsWith("/companyfacts/CIK0001692819.json")) return json(JSON.parse(read("companyfacts_VST_trimmed.json").toString()));
   return new Response("not found", { status: 404 });
 }
 
@@ -107,6 +155,18 @@ async function collect(events: AsyncIterable<AskEvent>): Promise<AskEvent[]> {
   return out;
 }
 
+async function drainExtract(): Promise<unknown[]> {
+  const results: unknown[] = [];
+  for (;;) {
+    const jobs = await ctx.boss.fetch<DocumentPayload>(Q.extract, { batchSize: 10 });
+    if (jobs.length === 0) return results;
+    for (const job of jobs) {
+      results.push(await extractJob(ctx, job.data));
+      await ctx.boss.complete(Q.extract, job.id);
+    }
+  }
+}
+
 async function queued(name: string): Promise<number> {
   // Live count; getQueue().queuedCount is a cached statistic refreshed on a timer.
   return (await ctx.boss.findJobs(name, { queued: true })).length;
@@ -126,6 +186,7 @@ beforeAll(async () => {
     STRONG_MODEL: "test-model",
     // Bag-of-words vectors give lower cosine scores than real embeddings.
     ASK_SIMILARITY_FLOOR: "0.05",
+    GOLDEN_DIR: path.join(tmp, "golden"),
   });
   ctx = createContext(config, {
     log: pino({ level: "silent" }),
@@ -388,6 +449,181 @@ describe("Phase 2 Ask: hybrid retrieval, grounded answer, refusal", () => {
     expect(bad.statusCode).toBe(400);
     expect(bad.json().error.code).toBe("VALIDATION_FAILED");
     await app.close();
+  });
+});
+
+describe("Phase 3 extraction: validate, retry once, route to review", () => {
+  let results: unknown[] = [];
+
+  it("extracts both live documents, saving only validated items", async () => {
+    results = await drainExtract();
+    expect(results).toContainEqual(
+      expect.objectContaining({ metrics: 1, guidance: 1, documentStatus: "needs_review", calls: 2 }),
+    );
+    expect(results).toContainEqual(expect.objectContaining({ metrics: 0, guidance: 0, documentStatus: "extracted", calls: 1 }));
+
+    const saved = await ctx.db.select().from(metrics);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ name: "net_income", periodType: "ytd", value: "1334000000", reviewStatus: "pending" });
+    const [pr] = await ctx.db
+      .select()
+      .from(documents)
+      .where(and(eq(documents.type, "press_release"), isNull(documents.supersededAt)));
+    expect(pr!.cleanText!.slice(saved[0]!.charStart, saved[0]!.charEnd)).toBe(NET_INCOME_ROW);
+
+    const [guide] = await ctx.db.select().from(guidance);
+    expect(guide).toMatchObject({ metric: "fcf", kind: "range", low: "3925000000", high: "4725000000", reviewStatus: "auto_approved" });
+  });
+
+  it("retries once with the specific errors, then sends what still fails to review", async () => {
+    const prRequests = extractRequests.filter((r) => !isTenQ(r));
+    expect(prRequests).toHaveLength(2);
+    expect(String(prRequests[1]!.input)).toMatch(/previous answer for this document had these problems/);
+    expect(String(prRequests[1]!.input)).toMatch(/disagrees with the headline table/);
+    expect(String(prRequests[1]!.input)).toMatch(/quote not found verbatim/);
+
+    const items = await ctx.db.select().from(reviewItems);
+    expect(items).toHaveLength(2);
+    const wrongColumn = items.find((i) => (i.candidate as { name: string }).name === "net_income")!;
+    expect(wrongColumn.regexValue).toBe("305000000");
+    expect(items.find((i) => (i.candidate as { name: string }).name === "op_income")!.errors.join(" ")).toMatch(
+      /quote not found verbatim/,
+    );
+  });
+
+  it("asks for structured output, keeps source text out of the instructions, and logs each call", async () => {
+    const req = extractRequests[0]!;
+    expect((req.text as { format: { type: string; strict: boolean } }).format).toMatchObject({ type: "json_schema", strict: true });
+    expect(String(req.instructions)).toMatch(/Quote verbatim or omit the metric/);
+    expect(String(req.instructions)).not.toMatch(/Vistra/);
+    expect(String(req.input)).toMatch(/Fiscal period in force: 2026-Q2/);
+    expect(String(req.input)).toMatch(/<document>\n[\s\S]*<\/document>$/);
+    const calls = await ctx.db.select().from(llmCalls).where(eq(llmCalls.purpose, "extract"));
+    expect(calls).toHaveLength(3);
+    expect(calls.every((c) => c.promptVersion === "extract.v1" && c.inputTokens === 5000 && c.ok)).toBe(true);
+  });
+
+  it("holds the event in needs_review until a human has looked", async () => {
+    const [event] = await ctx.db.select().from(earningsEvents);
+    expect(event!.status).toBe("needs_review");
+    expect(await queued(Q.compareAndBrief)).toBe(0);
+  });
+});
+
+describe("Phase 3 review: approve, reject, correct -> golden set", () => {
+  let app: ReturnType<typeof buildServer>;
+  beforeAll(() => {
+    app = buildServer(ctx);
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("GET /review lists failed candidates and pending items with source context", async () => {
+    const res = await app.inject({ method: "GET", url: "/review" });
+    expect(res.statusCode).toBe(200);
+    const { items, total } = res.json();
+    expect(total).toBe(3);
+    expect(items.map((i: { kind: string }) => i.kind).sort()).toEqual(["candidate", "candidate", "metric"]);
+
+    const pending = items.find((i: { kind: string }) => i.kind === "metric");
+    expect(pending.context.text.slice(pending.context.quoteStart, pending.context.quoteEnd)).toBe(NET_INCOME_ROW);
+    expect(pending.factValues).toContain(1334e6); // company-facts agrees with the six-month figure
+    expect(pending.reasons[0]).toMatch(/below the review threshold/);
+
+    const wrong = items.find((i: { kind: string; item: { name: string } }) => i.kind === "candidate" && i.item.name === "net_income");
+    expect(wrong.regexValue).toBe(305e6);
+    expect(wrong.factValues).toContain(305e6);
+  });
+
+  it("refuses to approve a failed candidate or accept a quote that is not in the document", async () => {
+    const [candidate] = await ctx.db.select().from(reviewItems).limit(1);
+    const approve = await app.inject({ method: "PATCH", url: `/review/candidate/${candidate!.id}`, payload: { action: "approve" } });
+    expect(approve.statusCode).toBe(409);
+    expect(approve.json().error.code).toBe("REVIEW_CONFLICT");
+
+    const badQuote = await app.inject({
+      method: "PATCH",
+      url: `/review/candidate/${candidate!.id}`,
+      payload: { action: "correct", value: 1, quote: "This sentence is not in the press release." },
+    });
+    expect(badQuote.statusCode).toBe(422);
+    expect(badQuote.json().error.code).toBe("QUOTE_NOT_FOUND");
+  });
+
+  it("approves the pending metric and rejects the made-up one", async () => {
+    const [pending] = await ctx.db.select().from(metrics).where(eq(metrics.reviewStatus, "pending"));
+    const ok = await app.inject({ method: "PATCH", url: `/review/metric/${pending!.id}`, payload: { action: "approve" } });
+    expect(ok.json()).toMatchObject({ status: "approved", goldenFile: null, documentStatus: "needs_review" });
+
+    const items = await ctx.db.select().from(reviewItems);
+    const madeUp = items.find((i) => (i.candidate as { name: string }).name === "op_income")!;
+    const rejected = await app.inject({
+      method: "PATCH",
+      url: `/review/candidate/${madeUp.id}`,
+      payload: { action: "reject", reason: "Not in the release" },
+    });
+    expect(rejected.json()).toMatchObject({ status: "rejected", documentStatus: "needs_review" });
+  });
+
+  it("a correction saves the human's value, keeps the model's, and writes a golden case (exit test)", async () => {
+    const items = await ctx.db.select().from(reviewItems).where(eq(reviewItems.status, "open"));
+    expect(items).toHaveLength(1);
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/review/candidate/${items[0]!.id}`,
+      payload: { action: "correct", value: 305e6, quote: NET_INCOME_ROW },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toMatchObject({ status: "corrected", documentStatus: "extracted" });
+
+    const [row] = await ctx.db.select().from(metrics).where(eq(metrics.id, body.rowId));
+    expect(row).toMatchObject({ value: "305000000", originalValue: "327000000", reviewStatus: "corrected", periodType: "quarter" });
+
+    const golden = JSON.parse(await fs.readFile(body.goldenFile, "utf8"));
+    expect(golden).toMatchObject({ ticker: "VST", fiscalPeriod: "2026-Q2" });
+    expect(golden.metrics).toEqual([
+      expect.objectContaining({ name: "net_income", periodType: "quarter", value: 305e6, modelValue: 327e6, quote: NET_INCOME_ROW }),
+    ]);
+    expect(golden.documents).toEqual([expect.objectContaining({ type: "press_release" })]);
+    const copied = path.join(path.dirname(body.goldenFile), golden.documents[0].file);
+    expect((await fs.stat(copied)).size).toBeGreaterThan(1000);
+  });
+
+  it("once nothing waits for review, the event resumes at compare", async () => {
+    const [event] = await ctx.db.select().from(earningsEvents);
+    expect(event!.status).toBe("extracted");
+    expect(await queued(Q.compareAndBrief)).toBe(1);
+  });
+
+  it("re-extraction never overwrites or reopens what a human settled", async () => {
+    const [pr] = await ctx.db
+      .select()
+      .from(documents)
+      .where(and(eq(documents.type, "press_release"), isNull(documents.supersededAt)));
+    const before = await ctx.db.select().from(metrics);
+    const again = await extractJob(ctx, { documentId: pr!.id });
+    expect(again).toMatchObject({ documentStatus: "extracted", review: 0 });
+    const after = await ctx.db.select().from(metrics);
+    expect(after.map((m) => [m.id, m.value, m.reviewStatus]).sort()).toEqual(
+      before.map((m) => [m.id, m.value, m.reviewStatus]).sort(),
+    );
+    expect(await ctx.db.select().from(reviewItems).where(eq(reviewItems.status, "open"))).toHaveLength(0);
+  });
+
+  it("POST /events/:id/reprocess requeues extraction for the event's live documents", async () => {
+    const [event] = await ctx.db.select().from(earningsEvents);
+    const res = await app.inject({ method: "POST", url: `/events/${event!.id}/reprocess`, payload: { stage: "extract" } });
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toMatchObject({ stage: "extract", documents: 2 });
+    expect(await queued(Q.extract)).toBe(2);
+    const missing = await app.inject({
+      method: "POST",
+      url: "/events/00000000-0000-4000-8000-000000000000/reprocess",
+      payload: { stage: "extract" },
+    });
+    expect(missing.json().error.code).toBe("EVENT_NOT_FOUND");
   });
 });
 

@@ -4,6 +4,8 @@ import type { AppContext } from "./context";
 import { AppError, HttpError } from "./errors";
 import { adminRoutes } from "./routes/admin";
 import { askRoutes } from "./routes/ask";
+import { eventRoutes } from "./routes/events";
+import { reviewRoutes } from "./routes/review";
 import { companyRoutes } from "./routes/companies";
 import { healthRoutes } from "./routes/health";
 
@@ -35,5 +37,7 @@ export function buildServer(ctx: AppContext): FastifyInstance {
   companyRoutes(app, ctx);
   adminRoutes(app, ctx);
   askRoutes(app, ctx);
+  eventRoutes(app, ctx);
+  reviewRoutes(app, ctx);
   return app;
 }

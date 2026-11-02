@@ -11,6 +11,7 @@ import { EdgarClient } from "./sources/edgar";
 import type { Fetcher } from "./sources/http";
 import { createProvider, type MarketDataProvider } from "./sources/provider";
 import { DisabledTranscriptSource, type TranscriptSource } from "./sources/transcripts";
+import { GoldenStore } from "./services/golden";
 import { RawStore } from "./storage/raw";
 
 /** Everything a route or job needs, built once per process. */
@@ -24,6 +25,7 @@ export interface AppContext {
   provider: MarketDataProvider;
   transcripts: TranscriptSource;
   raw: RawStore;
+  golden: GoldenStore;
   /** Null when OPENAI_API_KEY is not set: parsing still runs, chunks just have no embeddings yet. */
   llm: LlmGateway | null;
   embedder: Embedder | null;
@@ -69,6 +71,7 @@ export function createContext(config: Config, overrides: ContextOverrides = {}):
     provider: createProvider(config.DATA_PROVIDER, config.PROVIDER_API_KEY, overrides.fetcher),
     transcripts: new DisabledTranscriptSource(),
     raw: new RawStore(config.RAW_DATA_DIR),
+    golden: new GoldenStore(config.GOLDEN_DIR),
   };
 }
 

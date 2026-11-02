@@ -48,6 +48,8 @@ export const reviewStatus = pgEnum("review_status", values(ReviewStatus));
 export const guidanceKind = pgEnum("guidance_kind", values(GuidanceKind));
 export const guidanceChange = pgEnum("guidance_change", values(GuidanceChange));
 export const parseQuality = pgEnum("parse_quality", ["normal", "low"]);
+export const reviewItemKind = pgEnum("review_item_kind", ["metric", "guidance"]);
+export const reviewItemStatus = pgEnum("review_item_status", ["open", "corrected", "rejected"]);
 
 const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
 
@@ -303,6 +305,39 @@ export const briefs = pgTable(
     uniqueIndex("briefs_current_uq").on(t.eventId).where(sql`${t.supersededAt} is null`),
     uniqueIndex("briefs_event_version_uq").on(t.eventId, t.version),
   ],
+);
+
+/**
+ * Extractions that failed validation twice (§18). They can't go into metrics/guidance - the
+ * quote-required rule forbids it - so they wait here for a human. A correction writes the fixed
+ * row into metrics/guidance and appends a golden-set case (§21, §24).
+ */
+export const reviewItems = pgTable(
+  "review_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: reviewItemKind("kind").notNull(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => earningsEvents.id),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id),
+    /** The model's candidate as returned (ExtractedMetric / ExtractedGuidance shape). */
+    candidate: jsonb("candidate").notNull(),
+    /** Validation errors from the last attempt, plain sentences. */
+    errors: jsonb("errors").$type<string[]>().notNull(),
+    /** Headline-table regex value when it disagreed with the model (§18 step 2). */
+    regexValue: numeric("regex_value"),
+    status: reviewItemStatus("status").notNull().default("open"),
+    /** The metrics/guidance row a correction created. */
+    resolvedRowId: uuid("resolved_row_id"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    promptVersion: text("prompt_version").notNull(),
+    model: text("model").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("review_items_open_idx").on(t.status, t.createdAt), index("review_items_document_idx").on(t.documentId)],
 );
 
 export const alerts = pgTable(

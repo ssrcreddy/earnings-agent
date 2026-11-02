@@ -5,6 +5,7 @@ import { withTransaction, type AppContext } from "./context";
 import { HttpError } from "./errors";
 import { discoverJob } from "./jobs/discover";
 import { ingestJob } from "./jobs/ingest";
+import { extractJob } from "./jobs/extract";
 import { ParseError, parseJob } from "./jobs/parse";
 import { Q, createQueues, type DiscoverPayload, type DocumentPayload, type IngestPayload } from "./queues";
 import { recomputeEventStatus } from "./services/events";
@@ -70,7 +71,24 @@ export async function startWorker(ctx: AppContext): Promise<void> {
     },
   );
 
-  ctx.log.info({ embedder: ctx.embedder?.model ?? null }, "worker started");
+  // One extraction at a time: each is a strong-model call, and cost matters more than speed (§9).
+  await ctx.boss.work(
+    Q.extract,
+    { localConcurrency: 1, includeMetadata: true },
+    async (jobs: JobWithMetadata<DocumentPayload>[]) => {
+      for (const job of jobs) {
+        const log = ctx.log.child({ jobId: job.id, queue: Q.extract, documentId: job.data.documentId });
+        try {
+          log.info(await extractJob(ctx, job.data), "extract finished");
+        } catch (err) {
+          await recordJobFailure(ctx, job, err, { documentId: job.data.documentId });
+          throw err;
+        }
+      }
+    },
+  );
+
+  ctx.log.info({ embedder: ctx.embedder?.model ?? null, extractModel: ctx.config.STRONG_MODEL || null }, "worker started");
 }
 
 /** Errors that will fail identically on retry. */

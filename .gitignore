@@ -9,3 +9,5 @@ data/raw/*
 data/eval-reports/*
 !data/eval-reports/.gitkeep
 data/cache/
+next-env.d.ts
+*.tsbuildinfo

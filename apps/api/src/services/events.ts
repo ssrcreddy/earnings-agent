@@ -1,18 +1,22 @@
 import { companies, documents, earningsEvents, type Db } from "@eia/db";
-import type { DocumentStatus, EventSummary } from "@eia/shared";
+import type { DocumentStatus, EventStatus, EventSummary } from "@eia/shared";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AppContext } from "../context";
 import { eventStatusFromDocuments } from "./eventStatus";
 
-/** Re-derive the event's status from its live documents (fix 9). Call inside the transaction that changed them. */
-export async function recomputeEventStatus(db: Db, eventId: string): Promise<void> {
+/**
+ * Re-derive the event's status from its live documents (fix 9). Call inside the transaction that
+ * changed them. Returns the new status, or null when documents can't move the event.
+ */
+export async function recomputeEventStatus(db: Db, eventId: string): Promise<EventStatus | null> {
   const rows = await db
     .select({ status: documents.status })
     .from(documents)
     .where(and(eq(documents.eventId, eventId), isNull(documents.supersededAt)));
   const status = eventStatusFromDocuments(rows.map((r) => r.status as DocumentStatus));
-  if (!status) return;
+  if (!status) return null;
   await db.update(earningsEvents).set({ status, updatedAt: new Date() }).where(eq(earningsEvents.id, eventId));
+  return status;
 }
 
 /** Events for a ticker, newest first, with their documents (§21 - the Phase 1 exit-test endpoint). */

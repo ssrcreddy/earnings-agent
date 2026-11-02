@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  @apply bg-stone-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+}
+
+.field {
+  @apply mt-1 block w-full rounded-md border border-stone-300 bg-white px-2 py-1.5 font-mono text-sm dark:border-slate-700 dark:bg-slate-950;
+}
+
+.btn {
+  @apply rounded-md border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800;
+}
+
+.btn-primary {
+  @apply rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white;
+}
+
+kbd {
+  @apply ml-1 rounded border border-current/30 px-1 font-mono text-[11px];
+}
+
+mark.quote {
+  @apply rounded-sm bg-amber-200 px-0.5 text-slate-900 dark:bg-amber-400/80;
+}

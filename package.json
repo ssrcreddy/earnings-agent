@@ -17,7 +17,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "eval": "tsx scripts/eval.ts",
-    "embed:backfill": "pnpm --filter @eia/api embed:backfill"
+    "embed:backfill": "pnpm --filter @eia/api embed:backfill",
+    "dev:web": "pnpm --filter @eia/web dev"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

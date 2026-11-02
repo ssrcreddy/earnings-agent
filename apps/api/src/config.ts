@@ -33,6 +33,7 @@ const Env = z.object({
   ASK_SIMILARITY_FLOOR: z.coerce.number().min(0).max(1).default(0.25),
   RAW_DATA_DIR: z.string().default("./data/raw"),
   CACHE_DIR: z.string().default("./data/cache"),
+  GOLDEN_DIR: z.string().default("./data/golden"),
   PORT: z.coerce.number().int().default(8080),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   WATCHLIST: z.string().default(""),
@@ -54,6 +55,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...c,
     RAW_DATA_DIR: path.resolve(repoRoot, c.RAW_DATA_DIR),
     CACHE_DIR: path.resolve(repoRoot, c.CACHE_DIR),
+    GOLDEN_DIR: path.resolve(repoRoot, c.GOLDEN_DIR),
     repoRoot,
   };
 }
