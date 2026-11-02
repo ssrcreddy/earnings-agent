@@ -25,7 +25,14 @@ Watches a list of tickers, reads each earnings press release and SEC filing, and
 - Review API (`GET /review`, `PATCH /review/:kind/:id`), and `POST /events/:id/reprocess` to requeue parsing or extraction.
 - A keyboard-first review screen at `/review` in the Next.js app. Every correction is saved to `data/golden/<ticker>-<period>/`.
 
-Phases 4–5 (compare and briefs, then the week view, alerts and eval) are next.
+**Phase 4 (compare and briefs) is done.**
+- A pure compare service in decimal arithmetic. It calls beat, miss or in line against materiality bands (±1% revenue, ±2% EPS, ±0.5 pt margins), with the band edge counting as in line. It labels guidance raised, lowered, maintained, narrowed, widened, new or withdrawn from two stored rows, records the inputs behind each label, and never infers a direction from qualitative guidance.
+- Q4 is derived as the full year minus the nine-month year to date (fix 6), and marked as derived.
+- Briefs are written from a fact sheet of compared, approved facts only. A post-check requires every figure to be a cited fact-sheet value, every cited ID to exist, and no recommendation language. A failed draft is regenerated once, then the brief is withheld. With `STRONG_MODEL` set, the model writes the brief (`brief.v1`); otherwise a deterministic template does, through the same check.
+- Briefs are versioned, never edited in place, and every publication adds an alert.
+- `GET /events/:id/brief`, `GET /briefs` and `GET /documents/:id/context`. The web pages `/briefs` and `/brief/[eventId]` open each citation's passage, highlighted in its source document.
+
+Phase 5 (the week view, alerts feed, cost view and eval harness) is next.
 
 ## Run it (Windows dev loop)
 ```bash
@@ -58,3 +65,5 @@ To run the full stack reproducibly: `docker compose -f infra/docker-compose.yml 
 - **10-Q/10-K extraction reads MD&A only:** figures that appear only in the financial statements are left to the press release. A filing with no MD&A heading found is read whole.
 - **Review list:** `GET /review` returns the oldest 50 items and the total. Cursor pagination is still to do.
 - **Human decisions stick:** re-extraction never overwrites an approved or corrected value, and never reopens a rejected item.
+- **Consensus comes from the provider only:** with no `PROVIDER_API_KEY`, every verdict is `no_consensus`, and the brief compares results with the prior year instead. Finnhub's free tier covers EPS and revenue consensus only.
+- **Brief verdicts compare consolidated quarterly figures only.** Year-to-date and segment figures are reported without a verdict.

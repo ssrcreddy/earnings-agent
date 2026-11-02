@@ -1,7 +1,16 @@
 // Server-side API client. Response types come from @eia/shared, so the UI can't invent a shape
 // (or a status) the backend doesn't have (§22).
 import "server-only";
-import type { ErrorBody, ReviewAction, ReviewKind, ReviewListResponse, ReviewResult } from "@eia/shared";
+import type {
+  BriefResponse,
+  BriefSummary,
+  DocumentContext,
+  ErrorBody,
+  ReviewAction,
+  ReviewKind,
+  ReviewListResponse,
+  ReviewResult,
+} from "@eia/shared";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 
@@ -32,4 +41,8 @@ export const api = {
   review: () => request<ReviewListResponse>("/review"),
   act: (kind: ReviewKind, id: string, action: ReviewAction) =>
     request<ReviewResult>(`/review/${kind}/${id}`, { method: "PATCH", body: JSON.stringify(action) }),
+  briefs: () => request<{ briefs: BriefSummary[] }>("/briefs"),
+  brief: (eventId: string) => request<BriefResponse>(`/events/${encodeURIComponent(eventId)}/brief`),
+  documentContext: (documentId: string, start: number, end: number) =>
+    request<DocumentContext>(`/documents/${encodeURIComponent(documentId)}/context?start=${start}&end=${end}`),
 };

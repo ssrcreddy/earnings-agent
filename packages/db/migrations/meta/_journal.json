@@ -15,6 +15,13 @@
       "when": 1793578078610,
       "tag": "0001_spicy_ender_wiggin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793581343322,
+      "tag": "0002_clumsy_stick",
+      "breakpoints": true
     }
   ]
 }

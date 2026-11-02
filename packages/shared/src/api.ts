@@ -41,24 +41,60 @@ export const EventSummary = z.object({
 });
 export type EventSummary = z.infer<typeof EventSummary>;
 
+/** One citation marker in a brief ("M1"), resolved to the quote and where it sits in its source (§21). */
+export const BriefCitation = z.object({
+  marker: z.string(),
+  kind: z.enum(["metric", "guidance"]),
+  rowId: z.uuid(),
+  label: z.string(),
+  quote: z.string(),
+  documentId: z.uuid(),
+  documentType: z.string(),
+  sourceUrl: z.url(),
+  charStart: z.number().int(),
+  charEnd: z.number().int(),
+  /** Set for derived figures (fix 6) and human-corrected values, so the view can say so. */
+  note: z.string().nullable(),
+});
+export type BriefCitation = z.infer<typeof BriefCitation>;
+
 export const BriefResponse = z.object({
   eventId: z.uuid(),
   ticker: z.string(),
+  companyName: z.string(),
   fiscalPeriod: z.string(),
+  reportDate: z.string(),
   version: z.number().int(),
+  /** Earlier versions kept for audit (briefs are never edited in place). */
+  previousVersions: z.number().int(),
+  writer: z.string(),
+  promptVersion: z.string(),
+  createdAt: z.string(),
   bodyMd: z.string(),
-  citations: z.array(
-    z.object({
-      metricId: z.uuid(),
-      quote: z.string(),
-      documentType: z.string(),
-      sourceUrl: z.url(),
-      charStart: z.number().int(),
-      charEnd: z.number().int(),
-    }),
-  ),
+  citations: z.array(BriefCitation),
 });
 export type BriefResponse = z.infer<typeof BriefResponse>;
+
+export interface BriefSummary {
+  eventId: string;
+  ticker: string;
+  fiscalPeriod: string;
+  reportDate: string;
+  version: number;
+  headline: string;
+  createdAt: string;
+}
+
+/** GET /documents/:id/context: source text around a cited passage. */
+export interface DocumentContext {
+  documentId: string;
+  documentType: string;
+  sourceUrl: string;
+  text: string;
+  /** Offsets of the requested passage within `text`. */
+  highlightStart: number;
+  highlightEnd: number;
+}
 
 /** PATCH /review/:kind/:id (§21). `value` is in base units, like metrics.value. */
 export const ReviewAction = z.discriminatedUnion("action", [
@@ -120,6 +156,8 @@ export const ErrorCode = z.enum([
   "EVENT_NOT_FOUND",
   "COMPANY_NOT_FOUND",
   "REVIEW_ITEM_NOT_FOUND",
+  "BRIEF_NOT_FOUND",
+  "DOCUMENT_NOT_FOUND",
   "REVIEW_CONFLICT",
   "QUOTE_NOT_FOUND",
   "VALIDATION_FAILED",

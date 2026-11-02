@@ -295,6 +295,8 @@ export const briefs = pgTable(
     bodyMd: text("body_md").notNull(),
     metricIds: uuid("metric_ids").array().notNull(),
     guidanceIds: uuid("guidance_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    /** Citation markers in body_md ("M1", "G1") -> the metrics/guidance row each one cites. */
+    citations: jsonb("citations").$type<Record<string, { kind: "metric" | "guidance"; rowId: string }>>().notNull().default({}),
     model: text("model").notNull(),
     promptVersion: text("prompt_version").notNull(),
     supersededAt: timestamp("superseded_at", { withTimezone: true }),

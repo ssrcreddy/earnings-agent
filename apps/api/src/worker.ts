@@ -5,9 +5,10 @@ import { withTransaction, type AppContext } from "./context";
 import { HttpError } from "./errors";
 import { discoverJob } from "./jobs/discover";
 import { ingestJob } from "./jobs/ingest";
+import { compareAndBriefJob } from "./jobs/compareAndBrief";
 import { extractJob } from "./jobs/extract";
 import { ParseError, parseJob } from "./jobs/parse";
-import { Q, createQueues, type DiscoverPayload, type DocumentPayload, type IngestPayload } from "./queues";
+import { Q, createQueues, type DiscoverPayload, type DocumentPayload, type EventPayload, type IngestPayload } from "./queues";
 import { recomputeEventStatus } from "./services/events";
 
 const NY = "America/New_York";
@@ -82,6 +83,22 @@ export async function startWorker(ctx: AppContext): Promise<void> {
           log.info(await extractJob(ctx, job.data), "extract finished");
         } catch (err) {
           await recordJobFailure(ctx, job, err, { documentId: job.data.documentId });
+          throw err;
+        }
+      }
+    },
+  );
+
+  await ctx.boss.work(
+    Q.compareAndBrief,
+    { localConcurrency: 1, includeMetadata: true },
+    async (jobs: JobWithMetadata<EventPayload>[]) => {
+      for (const job of jobs) {
+        const log = ctx.log.child({ jobId: job.id, queue: Q.compareAndBrief, eventId: job.data.eventId });
+        try {
+          log.info(await compareAndBriefJob(ctx, job.data), "compare-and-brief finished");
+        } catch (err) {
+          await recordJobFailure(ctx, job, err, { eventId: job.data.eventId });
           throw err;
         }
       }

@@ -1,0 +1,1 @@
+ALTER TABLE "briefs" ADD COLUMN "citations" jsonb DEFAULT '{}'::jsonb NOT NULL;

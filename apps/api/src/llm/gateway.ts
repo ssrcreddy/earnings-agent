@@ -171,6 +171,39 @@ export class LlmGateway {
     }
   }
 
+  /** One plain-text call (brief drafting). A refusal or truncated output is an error, never a partial text. */
+  async generateText(req: StreamTextRequest): Promise<string> {
+    const started = Date.now();
+    let usage: Usage | null = null;
+    try {
+      const res = await this.client.responses.create({
+        model: req.model,
+        instructions: req.instructions,
+        input: req.input,
+        store: false,
+        ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
+        ...(supportsTemperature(req.model) ? { temperature: 0 } : {}),
+      });
+      if (res.usage) {
+        usage = {
+          inputTokens: res.usage.input_tokens,
+          cachedInputTokens: res.usage.input_tokens_details?.cached_tokens ?? 0,
+          outputTokens: res.usage.output_tokens,
+        };
+      }
+      const refusal = res.output?.flatMap((o) => o.content ?? []).find((c) => c.type === "refusal");
+      if (refusal) throw new StructuredOutputError(`model refused: ${refusal.refusal ?? ""}`.trim(), "refusal");
+      if (res.status === "incomplete") {
+        throw new StructuredOutputError(`response incomplete: ${res.incomplete_details?.reason ?? "unknown"}`, "incomplete");
+      }
+      await this.record(req, req.model, started, usage);
+      return res.output_text;
+    } catch (err) {
+      await this.record(req, req.model, started, usage, err);
+      throw err;
+    }
+  }
+
   /** Streams output text deltas; the usage row is written when the stream ends (or fails). */
   async *streamText(req: StreamTextRequest): AsyncGenerator<string> {
     const started = Date.now();

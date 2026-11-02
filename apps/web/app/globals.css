@@ -24,6 +24,26 @@ kbd {
   @apply ml-1 rounded border border-current/30 px-1 font-mono text-[11px];
 }
 
+.brief h3 {
+  @apply mt-5 mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400;
+}
+
+.brief p {
+  @apply leading-relaxed;
+}
+
+.brief ul {
+  @apply list-disc space-y-1.5 pl-5;
+}
+
+.cite {
+  @apply mx-0.5 rounded bg-sky-100 px-1 font-mono text-[11px] text-sky-800 hover:bg-sky-200 dark:bg-sky-900/60 dark:text-sky-200 dark:hover:bg-sky-800;
+}
+
+.cite-active {
+  @apply ring-2 ring-sky-500;
+}
+
 mark.quote {
   @apply rounded-sm bg-amber-200 px-0.5 text-slate-900 dark:bg-amber-400/80;
 }
