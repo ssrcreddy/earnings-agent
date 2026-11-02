@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import type { AppContext } from "./context";
 import { AppError, HttpError } from "./errors";
 import { adminRoutes } from "./routes/admin";
+import { askRoutes } from "./routes/ask";
 import { companyRoutes } from "./routes/companies";
 import { healthRoutes } from "./routes/health";
 
@@ -33,5 +34,6 @@ export function buildServer(ctx: AppContext): FastifyInstance {
   healthRoutes(app, ctx);
   companyRoutes(app, ctx);
   adminRoutes(app, ctx);
+  askRoutes(app, ctx);
   return app;
 }

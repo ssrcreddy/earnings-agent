@@ -1,5 +1,5 @@
-import { documents, earningsEvents } from "@eia/db";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { chunks, documents, earningsEvents } from "@eia/db";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { withTransaction, type AppContext } from "../context";
 import { Q, type IngestPayload } from "../queues";
 import { documentTypeForForm, selectEarningsDocument } from "../sources/edgarParse";
@@ -77,7 +77,22 @@ export async function ingestJob(ctx: AppContext, { eventId, ref }: IngestPayload
         ),
       )
       .returning({ id: documents.id });
-    if (superseded.length) log.info({ superseded: superseded.length }, "amended document; prior version superseded");
+    if (superseded.length) {
+      // Ask must never cite a superseded text (§17).
+      await tx.db
+        .update(chunks)
+        .set({ supersededAt: new Date() })
+        .where(
+          and(
+            inArray(
+              chunks.documentId,
+              superseded.map((s) => s.id),
+            ),
+            isNull(chunks.supersededAt),
+          ),
+        );
+      log.info({ superseded: superseded.length }, "amended document; prior version and its chunks superseded");
+    }
 
     await recomputeEventStatus(tx.db, eventId);
     await tx.db.update(earningsEvents).set({ lastError: null }).where(eq(earningsEvents.id, eventId));

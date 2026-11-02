@@ -27,6 +27,10 @@ const Env = z.object({
   SMALL_MODEL: z.string().default(""),
   EMBED_MODEL: z.string().default("text-embedding-3-small"),
   REVIEW_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
+  /** Extra per-model prices for cost logging: {"model": {"inputPerM": n, "cachedInputPerM": n, "outputPerM": n}}. */
+  LLM_PRICES_JSON: z.string().default(""),
+  /** Ask refuses without calling the LLM when no chunk is at least this similar to the question (§17). */
+  ASK_SIMILARITY_FLOOR: z.coerce.number().min(0).max(1).default(0.25),
   RAW_DATA_DIR: z.string().default("./data/raw"),
   CACHE_DIR: z.string().default("./data/cache"),
   PORT: z.coerce.number().int().default(8080),

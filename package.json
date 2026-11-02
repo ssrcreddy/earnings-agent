@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.9",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev:api": "pnpm --filter @eia/api dev:http",
     "dev:worker": "pnpm --filter @eia/api dev:worker",
@@ -14,7 +16,8 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "test": "vitest run",
-    "eval": "tsx scripts/eval.ts"
+    "eval": "tsx scripts/eval.ts",
+    "embed:backfill": "pnpm --filter @eia/api embed:backfill"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

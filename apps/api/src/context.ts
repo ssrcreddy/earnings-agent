@@ -1,7 +1,11 @@
 import { createDb, createPool, type Db } from "@eia/db";
+import OpenAI from "openai";
 import { PgBoss } from "pg-boss";
 import type pg from "pg";
 import type { Config } from "./config";
+import { GatewayEmbedder, type Embedder } from "./llm/embedder";
+import { LlmGateway, type OpenAILike } from "./llm/gateway";
+import { PriceTable } from "./llm/pricing";
 import { createLogger, type Logger } from "./logger";
 import { EdgarClient } from "./sources/edgar";
 import type { Fetcher } from "./sources/http";
@@ -20,12 +24,19 @@ export interface AppContext {
   provider: MarketDataProvider;
   transcripts: TranscriptSource;
   raw: RawStore;
+  /** Null when OPENAI_API_KEY is not set: parsing still runs, chunks just have no embeddings yet. */
+  llm: LlmGateway | null;
+  embedder: Embedder | null;
 }
 
 export interface ContextOverrides {
   log?: Logger;
   /** Replaces network access for EDGAR and the provider (tests). */
   fetcher?: Fetcher;
+  /** Replaces the OpenAI client behind the gateway (tests). */
+  llmClient?: OpenAILike;
+  /** Replaces the embedder (tests use HashEmbedder). */
+  embedder?: Embedder;
 }
 
 export function createContext(config: Config, overrides: ContextOverrides = {}): AppContext {
@@ -33,11 +44,21 @@ export function createContext(config: Config, overrides: ContextOverrides = {}):
   const pool = createPool(config.DATABASE_URL);
   const boss = new PgBoss({ connectionString: config.DATABASE_URL, max: 5 });
   boss.on("error", (err) => log.error({ err }, "pg-boss error"));
+  const db = createDb(pool);
+
+  const client =
+    overrides.llmClient ??
+    (config.OPENAI_API_KEY ? (new OpenAI({ apiKey: config.OPENAI_API_KEY }) as unknown as OpenAILike) : null);
+  const llm = client ? new LlmGateway(client, db, log, new PriceTable(config.LLM_PRICES_JSON)) : null;
+  const embedder = overrides.embedder ?? (llm ? new GatewayEmbedder(llm, config.EMBED_MODEL) : null);
+
   return {
     config,
     log,
     pool,
-    db: createDb(pool),
+    db,
+    llm,
+    embedder,
     boss,
     edgar: new EdgarClient({
       userAgent: config.EDGAR_USER_AGENT,

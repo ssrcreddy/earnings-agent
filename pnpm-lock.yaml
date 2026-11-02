@@ -50,6 +50,9 @@ importers:
       decimal.js:
         specifier: 10.6.0
         version: 10.6.0
+      domhandler:
+        specifier: ^5.0.3
+        version: 5.0.3
       dotenv:
         specifier: 18.0.9
         version: 18.0.9
@@ -59,9 +62,15 @@ importers:
       fastify:
         specifier: 5.12.7
         version: 5.12.7
+      gpt-tokenizer:
+        specifier: 4.1.0
+        version: 4.1.0
       luxon:
         specifier: 3.7.2
         version: 3.7.2
+      openai:
+        specifier: 7.47.0
+        version: 7.47.0(undici@7.30.1)(zod@4.6.7)
       pg:
         specifier: 8.23.1
         version: 8.23.1
@@ -74,6 +83,9 @@ importers:
       tsx:
         specifier: 4.23.15
         version: 4.23.15
+      unpdf:
+        specifier: 2.1.0
+        version: 2.1.0
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -1288,6 +1300,9 @@ packages:
     resolution: {integrity: sha512-UtdkTVyAJePQv0J2M9Xe4L0ruNSDV314XiIJsADI2Zf40bcdAonE/D/OhAU8AT99oij9mhLByb+NvA3QWZYgCg==}
     engines: {node: '>=18'}
 
+  gpt-tokenizer@4.1.0:
+    resolution: {integrity: sha512-r7Op7S3iPy9vGpcfHmfIlLN/+/mNL2kXDy3N/ppp2xC2pm57pyYTt3fqsncMZ/yfIT+d3mTGhd7H6fcF/qiqWg==}
+
   hashery@1.5.1:
     resolution: {integrity: sha512-iZyKG96/JwPz1N55vj2Ie2vXbhu440zfUfJvSwEqEbeLluk7NnapfGqa7LH0mOsnDxTF85Mx8/dyR6HfqcbmbQ==}
     engines: {node: '>=20'}
@@ -1481,6 +1496,33 @@ packages:
 
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
+
+  openai@7.47.0:
+    resolution: {integrity: sha512-BYa2RYgocAv9WjPUJmNu8fICuA1fFhkTBEpiR3sC5L1K6v8Hnhc8pcnQEhu8l/+W1XKA+JUaBa7HpT+AK1s77w==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      google-auth-library: '>=9.15.1 <12'
+      undici: '>=5 <9'
+      ws: ^8.21.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      google-auth-library:
+        optional: true
+      undici:
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -1769,6 +1811,15 @@ packages:
   undici@7.30.1:
     resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
     engines: {node: '>=20.18.1'}
+
+  unpdf@2.1.0:
+    resolution: {integrity: sha512-G/Hsrm++g0EoubUhV8TDFItq6oQ+FUu9EMvIRtHUwseKXB0iJoCvaLvBGOpYUBqyvggv/XfxhYYtohL2QpE3xQ==}
+    engines: {node: '>=24'}
+    peerDependencies:
+      '@napi-rs/canvas': ^0.1.69 || ^1.0.0
+    peerDependenciesMeta:
+      '@napi-rs/canvas':
+        optional: true
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
@@ -2828,6 +2879,8 @@ snapshots:
 
   globals@17.14.0: {}
 
+  gpt-tokenizer@4.1.0: {}
+
   hashery@1.5.1:
     dependencies:
       hookified: 1.15.1
@@ -2977,6 +3030,11 @@ snapshots:
   once@1.4.0:
     dependencies:
       wrappy: 1.0.2
+
+  openai@7.47.0(undici@7.30.1)(zod@4.6.7):
+    optionalDependencies:
+      undici: 7.30.1
+      zod: 4.6.7
 
   optionator@0.9.4:
     dependencies:
@@ -3268,6 +3326,8 @@ snapshots:
   undici-types@7.24.6: {}
 
   undici@7.30.1: {}
+
+  unpdf@2.1.0: {}
 
   uri-js@4.4.1:
     dependencies:
