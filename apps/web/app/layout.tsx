@@ -15,11 +15,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <header className="border-b border-stone-200 bg-white/80 dark:border-slate-800 dark:bg-slate-900/80">
           <nav className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3 text-sm">
             <span className="font-semibold">Earnings Intelligence</span>
+            <Link href="/week" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+              Week
+            </Link>
             <Link href="/briefs" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
               Briefs
             </Link>
+            <Link href="/alerts" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+              Alerts
+            </Link>
             <Link href="/review" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
               Review queue
+            </Link>
+            <Link href="/costs" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+              Costs
             </Link>
           </nav>
         </header>

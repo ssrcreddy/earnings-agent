@@ -1,0 +1,105 @@
+{
+  "ticker": "NVDA",
+  "companyName": "NVIDIA CORP",
+  "fiscalYearEnd": "0131",
+  "fiscalPeriod": "2027-Q2",
+  "documents": [
+    {
+      "type": "press_release",
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/q2fy27pr.htm",
+      "file": "q2fy27pr.htm"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "revenue",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 96221000000,
+      "unit": "usd",
+      "quote": "Revenue | $96,221 | $81,615 | $46,743 | 18% | 106%",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    },
+    {
+      "name": "gross_margin",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 75,
+      "unit": "percent",
+      "quote": "Gross margin | 75.0% | 74.9% | 72.4% | 0.1 pts | 2.6 pts",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    },
+    {
+      "name": "op_income",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 63734000000,
+      "unit": "usd",
+      "quote": "Operating income | $63,734 | $53,536 | $28,440 | 19% | 124%",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    },
+    {
+      "name": "net_income",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 59688000000,
+      "unit": "usd",
+      "quote": "Net income | $59,688 | $58,321 | $26,422 | 2% | 126%",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    },
+    {
+      "name": "eps_gaap",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 2.46,
+      "unit": "usd_per_share",
+      "quote": "Diluted earnings per share | $2.46 | $2.39 | $1.08 | 3% | 128%",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    }
+  ],
+  "guidance": [
+    {
+      "metric": "revenue",
+      "kind": "range",
+      "low": 105840000000,
+      "high": 110160000000,
+      "targetPeriod": "2027-Q3",
+      "quote": "Revenue is expected to be $108.0 billion, plus or minus 2%",
+      "modelLow": null,
+      "modelHigh": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release",
+      "previous": null,
+      "expectedChange": "new"
+    }
+  ],
+  "askQuestions": [
+    {
+      "question": "What revenue outlook did NVIDIA give for the third quarter of fiscal 2027?",
+      "ticker": "NVDA",
+      "goldSnippet": "Revenue is expected to be $108.0 billion"
+    },
+    {
+      "question": "What did NVIDIA say about capital expenditures?",
+      "ticker": "NVDA",
+      "goldSnippet": "capital expenditures"
+    }
+  ],
+  "updatedAt": "2026-11-01T00:00:00.000Z"
+}

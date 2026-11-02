@@ -58,6 +58,15 @@ services:
       db: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
+  web:
+    build: { context: .., dockerfile: apps/web/Dockerfile }
+    environment:
+      API_URL: http://api:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
 volumes:
   pgdata:
   rawdata:

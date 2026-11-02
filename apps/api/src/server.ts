@@ -8,6 +8,7 @@ import { briefRoutes } from "./routes/briefs";
 import { eventRoutes } from "./routes/events";
 import { reviewRoutes } from "./routes/review";
 import { companyRoutes } from "./routes/companies";
+import { dashboardRoutes } from "./routes/dashboard";
 import { healthRoutes } from "./routes/health";
 
 /** HTTP mode: REST routes only. Nothing CPU-heavy runs here - parsing lives in the worker (§9). */
@@ -40,6 +41,7 @@ export function buildServer(ctx: AppContext): FastifyInstance {
   askRoutes(app, ctx);
   eventRoutes(app, ctx);
   briefRoutes(app, ctx);
+  dashboardRoutes(app, ctx);
   reviewRoutes(app, ctx);
   return app;
 }

@@ -1,0 +1,94 @@
+{
+  "ticker": "NVDA",
+  "companyName": "NVIDIA CORP",
+  "fiscalYearEnd": "0131",
+  "fiscalPeriod": "2027-Q1",
+  "documents": [
+    {
+      "type": "press_release",
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000051/q1fy27pr.htm",
+      "file": "q1fy27pr.htm"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "revenue",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 81615000000,
+      "unit": "usd",
+      "quote": "Revenue | $81,615 | $68,127 | $44,062 | 20% | 85%",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    },
+    {
+      "name": "gross_margin",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 74.9,
+      "unit": "percent",
+      "quote": "Gross margin | 74.9% | 75.0% | 60.5% | (0.1) pts | 14.4 pts",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    },
+    {
+      "name": "op_income",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 53536000000,
+      "unit": "usd",
+      "quote": "Operating income | $53,536 | $44,299 | $21,638 | 21% | 147%",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    },
+    {
+      "name": "net_income",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 58321000000,
+      "unit": "usd",
+      "quote": "Net income | $58,321 | $42,960 | $18,775 | 36% | 211%",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    },
+    {
+      "name": "eps_gaap",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 2.39,
+      "unit": "usd_per_share",
+      "quote": "Diluted earnings per share | $2.39 | $1.76 | $0.76 | 36% | 214%",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    }
+  ],
+  "guidance": [
+    {
+      "metric": "revenue",
+      "kind": "range",
+      "low": 89180000000,
+      "high": 92820000000,
+      "targetPeriod": "2027-Q2",
+      "quote": "Revenue is expected to be $91.0 billion, plus or minus 2%",
+      "modelLow": null,
+      "modelHigh": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release",
+      "previous": null,
+      "expectedChange": "new"
+    }
+  ],
+  "askQuestions": [],
+  "updatedAt": "2026-11-01T00:00:00.000Z"
+}

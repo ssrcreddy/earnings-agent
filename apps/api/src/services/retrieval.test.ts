@@ -22,6 +22,12 @@ describe("contentTerms", () => {
     ]);
   });
 
+  it("drops question verbs like give and provide, which no passage needs to contain", () => {
+    // Regression from the eval: keyword-only mode requires every term, so "give" made both questions refuse.
+    expect(contentTerms("What revenue outlook did NVIDIA give for Q3?", ["nvidia"])).toEqual(["revenue", "outlook", "for"]);
+    expect(contentTerms("What guidance did management provide?")).toEqual(["guidance"]);
+  });
+
   it("returns nothing for a question of only filler", () => {
     expect(contentTerms("What did they say?")).toEqual(["they"]);
     expect(contentTerms("What did management say about it?")).toEqual([]);

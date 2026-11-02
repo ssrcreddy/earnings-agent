@@ -1,6 +1,8 @@
 # Earnings Intelligence Agent
 
-Watches a list of tickers, reads each earnings press release and SEC filing, and (from Phase 3) produces a factual, fully cited brief. The design is in `Earnings Intelligence Agent HLD and LLD.html`. The build plan, with the agreed changes to that design, is summarised below.
+Watches a list of tickers, reads each earnings press release and SEC filing, and produces a factual, fully cited brief. The brief covers what beat or missed, how guidance moved, and what management said, and every number links to the passage it came from. It makes no recommendations. The design is in `Earnings Intelligence Agent HLD and LLD.html`. The build plan, with the agreed changes to that design, is summarised below.
+
+All five phases of the MVP are built. The model-dependent parts are tested with fixtures and a fake model, but they haven't run against a real model yet; see "Not yet verified on real data" below.
 
 ## Status
 **Phase 1 (scaffold and data layer) is done.**
@@ -32,7 +34,20 @@ Watches a list of tickers, reads each earnings press release and SEC filing, and
 - Briefs are versioned, never edited in place, and every publication adds an alert.
 - `GET /events/:id/brief`, `GET /briefs` and `GET /documents/:id/context`. The web pages `/briefs` and `/brief/[eventId]` open each citation's passage, highlighted in its source document.
 
-Phase 5 (the week view, alerts feed, cost view and eval harness) is next.
+**Phase 5 (week view, alerts, costs and eval) is done.**
+- `GET /events/week`, `GET /alerts` (cursor-paged), `GET /admin/costs` and `GET /companies/:ticker`.
+- Web pages: `/week` (the landing page, which also shows the age of the last discovery run), `/ticker/[symbol]` (event history and the guidance table, with what was delivered), `/alerts` and `/costs`.
+- `pnpm eval` runs the real pipeline stages against `data/golden`. It reports extraction accuracy per metric (wrong values counted separately from missing ones), citation precision, false guidance changes (from hand-checked values, and end to end from extraction), Ask recall@5, and cost. It writes a dated report to `data/eval-reports/`. The gate fails the run on any false guidance change, any compare label error, citation precision below 100%, or a regression in accuracy or wrong values against the previous report.
+- Golden set: 7 cases from real releases (4 NVIDIA quarters, 3 VST quarters), with 23 headline figures, 7 guidance items with expected labels (NVIDIA's quarterly outlooks are each new; VST's 2026 free-cash-flow range is new, then maintained twice), and 3 Ask questions. The values were taken from each release's headline table and outlook, and checked by eye against the source rows; please spot-check them before relying on the accuracy numbers. Every correction made in the review screen adds to this set.
+- The web app is in Docker Compose (a standalone Next.js server on port 3000).
+
+### Not yet verified on real data
+These need `OPENAI_API_KEY` and `STRONG_MODEL` in `.env`:
+- Extraction of real releases (the Phase 3 exit test), and the end-to-end eval numbers.
+- Vector search, the Ask similarity floor and model-written Ask answers.
+- Model-written briefs, and checking real briefs' verdicts by hand (the Phase 4 exit test).
+
+Last run of `pnpm eval` without a model: 0 false guidance changes (7 of 7 labels correct), and Ask recall@5 of 66.7% (2 of 3) on keyword search only. The miss is VST's "free cash flow guidance" question: the release writes "FCFbG", which only embeddings can match.
 
 ## Run it (Windows dev loop)
 ```bash
@@ -43,17 +58,19 @@ pnpm db:migrate
 pnpm seed                       # loads WATCHLIST from .env
 pnpm dev:worker                 # terminal 1
 pnpm dev:api                    # terminal 2, http://localhost:8080
-pnpm dev:web                    # terminal 3, http://localhost:3000/review (API_URL defaults to :8080)
+pnpm dev:web                    # terminal 3, http://localhost:3000 (API_URL defaults to :8080)
 curl -X POST localhost:8080/admin/discover -H "content-type: application/json" -d "{}"
 curl localhost:8080/companies/VST/events
 curl -X POST localhost:8080/ask -H "content-type: application/json" -d "{\"question\":\"What did Vistra say about capital expenditures?\"}"
 ```
 Ask needs `OPENAI_API_KEY` for embeddings, and `STRONG_MODEL` to write an answer. Without the key, it still returns citations from full-text search. If you add the key after filings were parsed, run `pnpm embed:backfill` to embed the existing chunks.
 Extraction needs `OPENAI_API_KEY` and `STRONG_MODEL`. Without them, the extract job leaves documents at `parsed`. After setting them, requeue an event with `POST /events/:id/reprocess` and the body `{"stage":"extract"}`.
-To run the full stack reproducibly: `docker compose -f infra/docker-compose.yml up --build`. The web app isn't in Compose yet; it arrives with Phase 5.
+To run the full stack reproducibly, use `docker compose -f infra/docker-compose.yml up --build`. It starts the database, migrations, API, worker and web app, with the web app at http://localhost:3000.
 
-## Tests
-`pnpm test` runs the unit tests and the integration tests. The integration tests run against the `eia_test` database, with EDGAR served from saved fixtures. `pnpm typecheck` and `pnpm lint` cover the whole workspace.
+## Tests and evaluation
+`pnpm test` runs the unit tests and the integration tests. The integration tests run against the `eia_test` database, with EDGAR served from saved fixtures and a fake model. `pnpm typecheck` and `pnpm lint` cover the whole workspace.
+
+`pnpm eval` runs the golden-set evaluation and exits non-zero if the gate fails. Run it after any prompt or model change, before making the change the default. `pnpm eval --no-model` skips extraction, and `--no-retrieval` skips Ask recall.
 
 ## Notes and known limits
 - **EDGAR rate limit:** the 8 req/s limit is enforced per process, so run exactly one worker (fix 7).
@@ -67,3 +84,5 @@ To run the full stack reproducibly: `docker compose -f infra/docker-compose.yml 
 - **Human decisions stick:** re-extraction never overwrites an approved or corrected value, and never reopens a rejected item.
 - **Consensus comes from the provider only:** with no `PROVIDER_API_KEY`, every verdict is `no_consensus`, and the brief compares results with the prior year instead. Finnhub's free tier covers EPS and revenue consensus only.
 - **Brief verdicts compare consolidated quarterly figures only.** Year-to-date and segment figures are reported without a verdict.
+- **Eval extraction runs offline:** it doesn't use company facts, so in the eval every value must appear in its quote.
+- **Retrieval recall needs the corpus:** the eval measures Ask against whatever is ingested in the database. Questions about companies with no chunks are reported as unavailable, not as misses.

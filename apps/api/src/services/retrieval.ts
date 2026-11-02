@@ -111,6 +111,7 @@ const QUESTION_FILLER = new Set([
   "what", "did", "does", "say", "said", "says", "tell", "told", "about", "management", "managements",
   "company", "discuss", "discussed", "mention", "mentioned", "talk", "talked", "comment", "comments",
   "commentary", "how", "why", "when", "which", "their", "its", "there", "any", "anything", "latest", "recent",
+  "give", "gave", "given", "gives", "provide", "provided", "provides", "offer", "offered", "share", "shared",
 ]);
 
 /** Topic words of a question, minus filler and the named company's own words (§17 keyword channel). */

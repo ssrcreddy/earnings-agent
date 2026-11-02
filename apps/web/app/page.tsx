@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// The week view (§22) arrives in Phase 5; until then the review queue is the landing screen.
+// The week view is the landing screen during earnings season (§22).
 export default function Home() {
-  redirect("/review");
+  redirect("/week");
 }

@@ -1,0 +1,56 @@
+{
+  "ticker": "VST",
+  "companyName": "Vistra Corp.",
+  "fiscalYearEnd": "1231",
+  "fiscalPeriod": "2026-Q2",
+  "documents": [
+    {
+      "type": "press_release",
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1692819/000169281926000017/vistra-20260630xearningsre.htm",
+      "file": "vistra-20260630xearningsre.htm"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "net_income",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 305000000,
+      "unit": "usd",
+      "quote": "Net income | $305 | $327 | $1,334 | $59",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    }
+  ],
+  "guidance": [
+    {
+      "metric": "fcf",
+      "kind": "range",
+      "low": 3925000000,
+      "high": 4725000000,
+      "targetPeriod": "2026-FY",
+      "quote": "Ongoing Operations Adjusted FCFbG1 guidance ranges of $6.8 billion to $7.6 billion and $3.925 billion to $4.725 billion",
+      "modelLow": null,
+      "modelHigh": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release",
+      "previous": {
+        "low": 3925000000,
+        "high": 4725000000,
+        "kind": "range"
+      },
+      "expectedChange": "maintained"
+    }
+  ],
+  "askQuestions": [
+    {
+      "question": "What free cash flow guidance did Vistra give for 2026?",
+      "ticker": "VST",
+      "goldSnippet": "$3.925 billion to $4.725 billion"
+    }
+  ],
+  "updatedAt": "2026-11-01T00:00:00.000Z"
+}

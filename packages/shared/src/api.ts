@@ -85,6 +85,89 @@ export interface BriefSummary {
   createdAt: string;
 }
 
+/** GET /events/week (§21): prints grouped by report day, with headline verdicts once compared. */
+export interface WeekEvent {
+  eventId: string;
+  ticker: string;
+  companyName: string;
+  fiscalPeriod: string;
+  reportDate: string;
+  status: string;
+  lastError: string | null;
+  verdicts: { metric: string; verdict: string }[];
+  guidanceChanges: { metric: string; targetPeriod: string; change: string }[];
+  hasBrief: boolean;
+}
+
+export interface WeekResponse {
+  from: string; // YYYY-MM-DD, New York dates
+  to: string;
+  days: { date: string; events: WeekEvent[] }[];
+  /** When the discover job last ran (§23), so a dead scheduler is visible. */
+  lastDiscoverAt: string | null;
+}
+
+export interface AlertEntry {
+  id: string;
+  eventId: string;
+  ticker: string;
+  fiscalPeriod: string;
+  kind: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface AlertsResponse {
+  alerts: AlertEntry[];
+  /** Pass as ?cursor= for the next page; null on the last page. */
+  nextCursor: string | null;
+}
+
+export interface CostRow {
+  eventId: string | null;
+  ticker: string | null;
+  fiscalPeriod: string | null;
+  purpose: string;
+  calls: number;
+  failedCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface CostsResponse {
+  rows: CostRow[];
+  totalUsd: number;
+  /** Cost per print: events with at least one call. */
+  perEvent: { eventId: string; ticker: string; fiscalPeriod: string; costUsd: number }[];
+  /** Models seen in llm_calls without a configured price (logged at cost 0). */
+  unpricedModels: string[];
+}
+
+/** UC-5 guidance history (§22): what was guided each quarter, how it moved, and what was delivered. */
+export interface GuidanceHistoryRow {
+  metric: string;
+  targetPeriod: string;
+  entries: {
+    fiscalPeriod: string;
+    eventId: string;
+    kind: string;
+    low: number | null;
+    high: number | null;
+    change: string | null;
+    quote: string;
+  }[];
+  /** The actual for the target period, once reported. */
+  delivered: { value: number; fiscalPeriod: string; verdict: string | null } | null;
+  unit: string;
+}
+
+export interface TickerResponse {
+  company: { ticker: string; name: string; exchange: string | null; fiscalYearEnd: string | null };
+  events: EventSummary[];
+  guidance: GuidanceHistoryRow[];
+}
+
 /** GET /documents/:id/context: source text around a cited passage. */
 export interface DocumentContext {
   documentId: string;

@@ -859,4 +859,87 @@ describe("Phase 4 compare and brief", () => {
   });
 });
 
+describe("Phase 5 read models: week, alerts, costs, ticker", () => {
+  let app: ReturnType<typeof buildServer>;
+  beforeAll(() => {
+    app = buildServer(ctx);
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("GET /events/week groups prints by New York day, with verdicts and guidance changes", async () => {
+    const res = await app.inject({ method: "GET", url: "/events/week?from=2026-08-03" });
+    expect(res.statusCode).toBe(200);
+    const week = res.json();
+    expect(week).toMatchObject({ from: "2026-08-03", to: "2026-08-09" });
+    expect(week.days.map((d: { date: string }) => d.date)).toEqual([
+      "2026-08-03",
+      "2026-08-04",
+      "2026-08-05",
+      "2026-08-06",
+      "2026-08-07",
+      "2026-08-08",
+      "2026-08-09",
+    ]);
+    const friday = week.days.find((d: { date: string }) => d.date === "2026-08-07");
+    expect(friday.events).toEqual([
+      expect.objectContaining({
+        ticker: "VST",
+        fiscalPeriod: "2026-Q2",
+        status: "compared",
+        hasBrief: true,
+        verdicts: [{ metric: "net_income", verdict: "beat" }],
+        guidanceChanges: [{ metric: "fcf", targetPeriod: "2026-FY", change: "maintained" }],
+      }),
+    ]);
+    expect(week.lastDiscoverAt).not.toBeNull();
+
+    const bad = await app.inject({ method: "GET", url: "/events/week?from=2026-08-09&to=2026-08-01" });
+    expect(bad.json().error.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("GET /alerts lists the feed newest first, with a cursor for the next page", async () => {
+    const res = (await app.inject({ method: "GET", url: "/alerts" })).json();
+    expect(res.alerts.length).toBeGreaterThanOrEqual(3);
+    expect(res.alerts[0]).toMatchObject({ ticker: "VST", fiscalPeriod: "2026-Q2", kind: "brief_withheld" });
+    const times = res.alerts.map((a: { createdAt: string }) => Date.parse(a.createdAt));
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+    expect(res.nextCursor).toBeNull();
+
+    const bad = await app.inject({ method: "GET", url: "/alerts?cursor=nonsense" });
+    expect(bad.json().error.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("GET /admin/costs groups spend by print and purpose and names unpriced models", async () => {
+    const res = (await app.inject({ method: "GET", url: "/admin/costs" })).json();
+    const purposes = res.rows.filter((r: { ticker: string }) => r.ticker === "VST").map((r: { purpose: string }) => r.purpose);
+    expect(purposes.sort()).toEqual(["brief", "extract"]);
+    const extract = res.rows.find((r: { purpose: string; ticker: string }) => r.purpose === "extract" && r.ticker === "VST");
+    // 3 calls in the first extraction, 2 when re-extracting the release, 3 after the reprocess.
+    expect(extract).toMatchObject({ calls: 8, failedCalls: 0, inputTokens: 40000 });
+    expect(res.unpricedModels).toContain("test-model");
+    expect(res.perEvent[0]).toMatchObject({ ticker: "VST", fiscalPeriod: "2026-Q2" });
+  });
+
+  it("GET /companies/:ticker shows the guidance table across quarters", async () => {
+    const res = (await app.inject({ method: "GET", url: "/companies/vst" })).json();
+    expect(res.company).toMatchObject({ ticker: "VST", name: "Vistra Corp." });
+    expect(res.events.map((e: { fiscalPeriod: string }) => e.fiscalPeriod)).toEqual(["2026-Q2", "2026-Q1", "2025-Q2"]);
+    expect(res.guidance).toEqual([
+      expect.objectContaining({
+        metric: "fcf",
+        targetPeriod: "2026-FY",
+        unit: "usd",
+        delivered: null,
+        entries: [
+          expect.objectContaining({ fiscalPeriod: "2026-Q1", low: 3.925e9, high: 4.725e9, change: null }),
+          expect.objectContaining({ fiscalPeriod: "2026-Q2", low: 3.925e9, high: 4.725e9, change: "maintained" }),
+        ],
+      }),
+    ]);
+    expect((await app.inject({ method: "GET", url: "/companies/ZZZZ" })).json().error.code).toBe("COMPANY_NOT_FOUND");
+  });
+});
+
 

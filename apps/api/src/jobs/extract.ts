@@ -59,23 +59,7 @@ export async function extractJob(ctx: AppContext, { documentId }: DocumentPayloa
   if (!doc.cleanText) return { skipped: "not_parsed" };
 
   const model = ctx.config.STRONG_MODEL;
-  const modelCall: ModelCall | null =
-    call ??
-    (ctx.llm && model
-      ? (input) =>
-          ctx.llm!.generateStructured({
-            purpose: "extract",
-            promptVersion: EXTRACT_PROMPT_VERSION,
-            eventId: event.id,
-            documentId,
-            model,
-            instructions: EXTRACT_INSTRUCTIONS,
-            input,
-            schema: LlmExtractionResult,
-            schemaName: "extraction_result",
-            maxOutputTokens: 8000,
-          })
-      : null);
+  const modelCall = call ?? extractionModelCall(ctx, { eventId: event.id, documentId });
   if (!modelCall) {
     // Leave the document parsed; POST /events/:id/reprocess re-runs extraction once a model is set.
     ctx.log.warn({ documentId }, "no extraction model configured (OPENAI_API_KEY + STRONG_MODEL); skipping");
@@ -91,15 +75,39 @@ export async function extractJob(ctx: AppContext, { documentId }: DocumentPayloa
     facts: await loadFacts(ctx, company.cik),
     headline: doc.type === "press_release" ? await headlineFigures(ctx, doc.rawPath) : [],
   };
-  const header = [
-    `Company: ${company.ticker} (${company.name})`,
-    `Document: ${describe(doc.type)}`,
-    `Fiscal period in force: ${event.fiscalPeriod} (fiscal year ${event.fiscalPeriod.slice(0, 4)}, quarter ending around ${vc.periodEnd.toISOString().slice(0, 10)})`,
-  ].join("\n");
+  const header = extractionHeader(company.ticker, company.name, doc.type, event.fiscalPeriod, vc.periodEnd);
 
   const outcome = await runExtraction(modelCall, await extractionParts(ctx, doc.id, doc.type, doc.cleanText, header), vc);
   const usedModel = call ? "injected" : model;
   return persist(ctx, { doc, event, outcome, model: usedModel });
+}
+
+/** The configured extraction model as a ModelCall, or null when none is set. Shared with the eval (§24). */
+export function extractionModelCall(ctx: AppContext, meta: { eventId?: string; documentId?: string } = {}): ModelCall | null {
+  const model = ctx.config.STRONG_MODEL;
+  if (!ctx.llm || !model) return null;
+  const llm = ctx.llm;
+  return (input) =>
+    llm.generateStructured({
+      purpose: "extract",
+      promptVersion: EXTRACT_PROMPT_VERSION,
+      ...meta,
+      model,
+      instructions: EXTRACT_INSTRUCTIONS,
+      input,
+      schema: LlmExtractionResult,
+      schemaName: "extraction_result",
+      maxOutputTokens: 8000,
+    });
+}
+
+/** The request header every extraction call carries: company, document and the period in force. */
+export function extractionHeader(ticker: string, name: string, type: DocumentType, fiscalPeriod: string, periodEnd: Date): string {
+  return [
+    `Company: ${ticker} (${name})`,
+    `Document: ${describe(type)}`,
+    `Fiscal period in force: ${fiscalPeriod} (fiscal year ${fiscalPeriod.slice(0, 4)}, quarter ending around ${periodEnd.toISOString().slice(0, 10)})`,
+  ].join("\n");
 }
 
 function describe(type: DocumentType): string {

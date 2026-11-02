@@ -14,6 +14,8 @@ export interface GoldenMetric {
   modelValue: number | null;
   documentType: string;
   correctedAt: string;
+  /** Where the expected value came from: "review" (a correction) or a seed note. */
+  source?: string;
 }
 
 export interface GoldenGuidance {
@@ -27,16 +29,32 @@ export interface GoldenGuidance {
   modelHigh: number | null;
   documentType: string;
   correctedAt: string;
+  source?: string;
+  /** The previous guide for the same metric and target period, hand-checked; null = none. */
+  previous?: { low: number | null; high: number | null; kind: string } | null;
+  /** The label Compare must produce (§24's gated metric). */
+  expectedChange?: string | null;
+}
+
+/** An Ask question with the passage a correct answer must retrieve (§24 recall@5). */
+export interface GoldenQuestion {
+  question: string;
+  ticker?: string;
+  /** Text that must appear in at least one of the top-5 retrieved chunks. */
+  goldSnippet: string;
 }
 
 export interface GoldenCase {
   ticker: string;
+  /** Needed to replay extraction exactly as the job runs it. */
+  companyName?: string;
+  fiscalYearEnd?: string;
   fiscalPeriod: string;
   documents: { type: string; sourceUrl: string; file: string }[];
   metrics: GoldenMetric[];
   guidance: GoldenGuidance[];
-  /** Gold chunk ids for Ask questions (§24); filled in by hand. */
-  askQuestions: { question: string; goldChunkIds: string[] }[];
+  /** Ask questions with their gold passages (§24); filled in by hand. */
+  askQuestions: GoldenQuestion[];
   updatedAt: string;
 }
 

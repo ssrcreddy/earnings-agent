@@ -2,14 +2,18 @@
 // (or a status) the backend doesn't have (§22).
 import "server-only";
 import type {
+  AlertsResponse,
   BriefResponse,
   BriefSummary,
+  CostsResponse,
   DocumentContext,
   ErrorBody,
   ReviewAction,
   ReviewKind,
   ReviewListResponse,
   ReviewResult,
+  TickerResponse,
+  WeekResponse,
 } from "@eia/shared";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
@@ -45,4 +49,8 @@ export const api = {
   brief: (eventId: string) => request<BriefResponse>(`/events/${encodeURIComponent(eventId)}/brief`),
   documentContext: (documentId: string, start: number, end: number) =>
     request<DocumentContext>(`/documents/${encodeURIComponent(documentId)}/context?start=${start}&end=${end}`),
+  week: (from?: string) => request<WeekResponse>(`/events/week${from ? `?from=${encodeURIComponent(from)}` : ""}`),
+  alerts: (cursor?: string) => request<AlertsResponse>(`/alerts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
+  costs: () => request<CostsResponse>("/admin/costs"),
+  ticker: (symbol: string) => request<TickerResponse>(`/companies/${encodeURIComponent(symbol)}`),
 };

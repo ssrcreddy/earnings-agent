@@ -1,0 +1,46 @@
+{
+  "ticker": "VST",
+  "companyName": "Vistra Corp.",
+  "fiscalYearEnd": "1231",
+  "fiscalPeriod": "2025-Q4",
+  "documents": [
+    {
+      "type": "press_release",
+      "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1692819/000119312526073364/d21122dex991.htm",
+      "file": "d21122dex991.htm"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "net_income",
+      "segment": null,
+      "periodType": "quarter",
+      "value": 233000000,
+      "unit": "usd",
+      "quote": "Net income (loss) | $233 | $490 | $944 | $2,812",
+      "modelValue": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release"
+    }
+  ],
+  "guidance": [
+    {
+      "metric": "fcf",
+      "kind": "range",
+      "low": 3925000000,
+      "high": 4725000000,
+      "targetPeriod": "2026-FY",
+      "quote": "Ongoing Operations Adjusted FCFbG1 guidance ranges of $6.8 billion to $7.6 billion and $3.925 billion to $4.725 billion",
+      "modelLow": null,
+      "modelHigh": null,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-01T00:00:00.000Z",
+      "source": "seed: headline table and outlook, checked by eye against the release",
+      "previous": null,
+      "expectedChange": "new"
+    }
+  ],
+  "askQuestions": [],
+  "updatedAt": "2026-11-01T00:00:00.000Z"
+}
