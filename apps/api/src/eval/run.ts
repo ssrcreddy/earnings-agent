@@ -5,7 +5,7 @@ import { llmCalls } from "@eia/db";
 import { nominalEndOf, type DocumentType, type GuidanceKind } from "@eia/shared";
 import { gte, sql } from "drizzle-orm";
 import type { AppContext } from "../context";
-import { EXTRACT_PROMPT_VERSION, extractionHeader } from "../jobs/extract";
+import { EXTRACT_PROMPT_VERSION, extractionHeader, extractionWindowTokens } from "../jobs/extract";
 import { parseHeadlineTable } from "../parsing/headline";
 import { cleanHtml } from "../parsing/html";
 import { approxEqual } from "../parsing/numbers";
@@ -51,6 +51,8 @@ export interface EvalReport {
     extracted: { checked: number; correct: number; falseChanges: number; missing: number; mismatches: string[] } | null;
   };
   retrieval: { questions: number; hits: number; recallAt5: number | null; misses: string[]; unavailable: number } | null;
+  /** Cases whose extraction errored (rate limits, API errors): recorded and skipped, not scored. */
+  caseErrors: { case: string; message: string }[];
   cost: { calls: number; failedCalls: number; inputTokens: number; outputTokens: number; costUsd: number; perCaseUsd: number; avgLatencyMs: number } | null;
 }
 
@@ -83,11 +85,18 @@ export interface EvalOptions {
   call: ModelCall | null;
   model: string | null;
   retrieval: boolean;
+  /** Run only these case ids (e.g. "NVDA-2027-Q2"); all cases when omitted. */
+  only?: string[];
 }
 
 export async function runEval(ctx: AppContext, opts: EvalOptions): Promise<EvalReport> {
   const started = new Date();
-  const cases = loadCases(opts.goldenDir);
+  const all = loadCases(opts.goldenDir);
+  const cases = opts.only?.length ? all.filter((c) => opts.only!.includes(c.id)) : all;
+  const unknown = (opts.only ?? []).filter((id) => !all.some((c) => c.id === id));
+  if (unknown.length) throw new Error(`unknown golden case(s): ${unknown.join(", ")}`);
+  const caseErrors: EvalReport["caseErrors"] = [];
+  const windowTokens = extractionWindowTokens(ctx.config);
 
   // --- Guidance labels on hand-checked values: deterministic, always runs ---------------------
   const labels = { checked: 0, correct: 0, falseChanges: 0, mismatches: [] as string[] };
@@ -125,36 +134,47 @@ export async function runEval(ctx: AppContext, opts: EvalOptions): Promise<EvalR
       const gotMetrics = new Map<string, number>();
       const gotGuides = new Map<string, { kind: GuidanceKind; low: number | null; high: number | null }>();
 
-      for (const d of g.documents) {
-        const type = d.type as DocumentType;
-        const clean = cleanHtml(readFileSync(path.join(c.dir, d.file), "utf8"));
-        const blocks = labelSections(type, clean.blocks);
-        const vc: ValidationContext = {
-          text: clean.text,
-          docType: type,
-          fiscalPeriod: g.fiscalPeriod,
-          periodEnd,
-          facts: null, // offline: values must appear in their quotes
-          headline: type === "press_release" ? parseHeadlineTable(clean.text, blocks) : [],
-        };
-        const header = extractionHeader(g.ticker, g.companyName ?? g.ticker, type, g.fiscalPeriod, periodEnd);
-        const mda = blocks.filter((b) => b.section === "mda");
-        const text = type === "press_release" || mda.length === 0 ? clean.text : clean.text.slice(mda[0]!.start, mda.at(-1)!.end);
-        const outcome = await runExtraction(opts.call, [{ header, text }], vc);
+      // Citation checks for this case; added to the totals only if the whole case ran.
+      let checked = 0;
+      let supported = 0;
+      try {
+        for (const d of g.documents) {
+          const type = d.type as DocumentType;
+          const clean = cleanHtml(readFileSync(path.join(c.dir, d.file), "utf8"));
+          const blocks = labelSections(type, clean.blocks);
+          const vc: ValidationContext = {
+            text: clean.text,
+            docType: type,
+            fiscalPeriod: g.fiscalPeriod,
+            periodEnd,
+            facts: null, // offline: values must appear in their quotes
+            headline: type === "press_release" ? parseHeadlineTable(clean.text, blocks) : [],
+          };
+          const header = extractionHeader(g.ticker, g.companyName ?? g.ticker, type, g.fiscalPeriod, periodEnd);
+          const mda = blocks.filter((b) => b.section === "mda");
+          const text = type === "press_release" || mda.length === 0 ? clean.text : clean.text.slice(mda[0]!.start, mda.at(-1)!.end);
+          const outcome = await runExtraction(opts.call, [{ header, text }], vc, windowTokens);
 
-        for (const m of outcome.metrics) {
-          gotMetrics.set(metricKey(m.item), m.item.value);
-          // Citation precision: re-run the support check independently of the validator's verdict.
-          citation.checked++;
-          const at = locateQuote(clean.text, m.item.quote);
-          if (at && valueInQuote(m.item.value, m.item.unit, m.item.quote, clean.text, at.start)) citation.supported++;
+          for (const m of outcome.metrics) {
+            gotMetrics.set(metricKey(m.item), m.item.value);
+            // Citation precision: re-run the support check independently of the validator's verdict.
+            checked++;
+            const at = locateQuote(clean.text, m.item.quote);
+            if (at && valueInQuote(m.item.value, m.item.unit, m.item.quote, clean.text, at.start)) supported++;
+          }
+          for (const v of outcome.guidance) {
+            gotGuides.set(guidanceKey(v.item), { kind: v.item.kind, low: v.item.low, high: v.item.high });
+            checked++;
+            if (locateQuote(clean.text, v.item.quote)) supported++;
+          }
         }
-        for (const v of outcome.guidance) {
-          gotGuides.set(guidanceKey(v.item), { kind: v.item.kind, low: v.item.low, high: v.item.high });
-          citation.checked++;
-          if (locateQuote(clean.text, v.item.quote)) citation.supported++;
-        }
+      } catch (err) {
+        // A rate limit or API error on one case must not lose the others' results.
+        caseErrors.push({ case: c.id, message: err instanceof Error ? err.message.slice(0, 300) : String(err) });
+        continue;
       }
+      citation.checked += checked;
+      citation.supported += supported;
 
       // Score every expected metric: correct, wrong value, or missing.
       for (const m of g.metrics) {
@@ -252,5 +272,6 @@ export async function runEval(ctx: AppContext, opts: EvalOptions): Promise<EvalR
     guidance: { labels, extracted },
     retrieval,
     cost,
+    caseErrors,
   };
 }

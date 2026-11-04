@@ -1,5 +1,6 @@
 // `pnpm eval` (§24): run the golden set, print the summary, write a dated report, exit non-zero on a failed gate.
-// Flags: --no-model (skip extraction even if a model is configured), --no-retrieval.
+// Flags: --no-model (skip extraction even if a model is configured), --no-retrieval,
+// --cases=NVDA-2027-Q2,VST-2026-Q2 (run only these golden cases).
 import path from "node:path";
 import { loadConfig } from "../config";
 import { closeContext, createContext } from "../context";
@@ -10,6 +11,12 @@ import { runEval } from "./run";
 
 async function main(): Promise<void> {
   const args = new Set(process.argv.slice(2));
+  const only = process.argv
+    .find((a) => a.startsWith("--cases="))
+    ?.slice("--cases=".length)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const config = loadConfig();
   const ctx = createContext(config, { log: createLogger("warn") });
   try {
@@ -22,6 +29,7 @@ async function main(): Promise<void> {
       call,
       model: call ? config.STRONG_MODEL : null,
       retrieval: !args.has("--no-retrieval"),
+      only,
     });
     const result = gate(report, previous);
     const file = writeReport(reportsDir, report, previous, result);

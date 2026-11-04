@@ -2,7 +2,14 @@ import { llmCalls, type Db } from "@eia/db";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { z } from "zod";
 import type { Logger } from "../logger";
+import { countTokens } from "../parsing/chunker";
 import { PriceTable, type Usage } from "./pricing";
+import { TokenRateLimiter } from "./rateLimit";
+
+/** Tokens the structured-output JSON schema adds to a request's input (measured ~400 for extraction). */
+export const SCHEMA_TOKEN_ALLOWANCE = 600;
+/** Output reserved when a call sets no max_output_tokens. */
+const DEFAULT_OUTPUT_RESERVE = 4000;
 
 /**
  * The slice of the OpenAI SDK the gateway uses. The real client satisfies it; tests pass a fake.
@@ -70,11 +77,15 @@ export interface ResponseStreamEvent {
   };
 }
 
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+
 export interface CallMeta {
   purpose: "extract" | "brief" | "ask" | "embed" | "classify";
   promptVersion?: string;
   eventId?: string;
   documentId?: string;
+  /** Reasoning models only: how much hidden reasoning to spend (it counts as output tokens). */
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface StreamTextRequest extends CallMeta {
@@ -87,9 +98,19 @@ export interface StreamTextRequest extends CallMeta {
 
 const EMBED_BATCH = 96;
 
-/** Reasoning-class models reject sampling parameters, so temperature is sent only where accepted. */
+/** Reasoning-class models (o-series, GPT-5 and later) reject sampling parameters. */
+export function isReasoningModel(model: string): boolean {
+  return /^(o\d|gpt-([5-9]|\d{2,}))/i.test(model);
+}
+
 export function supportsTemperature(model: string): boolean {
-  return !/^(o\d|gpt-5)/i.test(model);
+  return !isReasoningModel(model);
+}
+
+/** temperature 0 where accepted; otherwise the requested reasoning effort, if any. */
+function determinism(req: { model: string; reasoningEffort?: ReasoningEffort }): Record<string, unknown> {
+  if (!isReasoningModel(req.model)) return { temperature: 0 };
+  return req.reasoningEffort ? { reasoning: { effort: req.reasoningEffort } } : {};
 }
 
 /**
@@ -102,7 +123,25 @@ export class LlmGateway {
     private readonly db: Db,
     private readonly log: Logger,
     private readonly prices: PriceTable,
+    /** Paces chat calls under the account's tokens-per-minute limit (LLM_TPM_LIMIT; 0 = off). */
+    private readonly limiter: TokenRateLimiter = new TokenRateLimiter(0),
+    /** Output tokens a call is expected to use, reserved against the limit (LLM_OUTPUT_RESERVE). */
+    private readonly outputReserve = DEFAULT_OUTPUT_RESERVE,
   ) {}
+
+  /**
+   * What a request counts against the per-minute limit: input plus the output allowance (the API
+   * reserves max_output_tokens up front). cl100k counts are close to the model's own; the margin
+   * covers the difference and the structured-output schema.
+   */
+  private async pace(req: { model: string; instructions: string; input: string; maxOutputTokens?: number }, extra = 0) {
+    if (!this.limiter.enabled) return;
+    const input = countTokens(req.instructions) + countTokens(req.input) + extra;
+    // Reserve the output a call typically uses, not its ceiling: OpenAI's per-minute check doesn't
+    // charge the full max_output_tokens up front (observed), and actual usage is what accrues.
+    const output = Math.min(req.maxOutputTokens ?? this.outputReserve, this.outputReserve);
+    await this.limiter.reserve(req.model, Math.ceil(input * 1.1) + output);
+  }
 
   async embed(model: string, texts: string[], meta: Omit<CallMeta, "purpose"> = {}): Promise<number[][]> {
     const out: number[][] = [];
@@ -131,6 +170,7 @@ export class LlmGateway {
    * then parsed with it again here - the API format is a request, the Zod parse is the guarantee.
    */
   async generateStructured<T extends z.ZodType>(req: StructuredRequest<T>): Promise<z.infer<T>> {
+    await this.pace(req, SCHEMA_TOKEN_ALLOWANCE);
     const started = Date.now();
     let usage: Usage | null = null;
     try {
@@ -141,7 +181,7 @@ export class LlmGateway {
         store: false,
         text: { format: zodTextFormat(req.schema, req.schemaName) },
         ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
-        ...(supportsTemperature(req.model) ? { temperature: 0 } : {}),
+        ...determinism(req),
       });
       if (res.usage) {
         usage = {
@@ -173,6 +213,7 @@ export class LlmGateway {
 
   /** One plain-text call (brief drafting). A refusal or truncated output is an error, never a partial text. */
   async generateText(req: StreamTextRequest): Promise<string> {
+    await this.pace(req);
     const started = Date.now();
     let usage: Usage | null = null;
     try {
@@ -182,7 +223,7 @@ export class LlmGateway {
         input: req.input,
         store: false,
         ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
-        ...(supportsTemperature(req.model) ? { temperature: 0 } : {}),
+        ...determinism(req),
       });
       if (res.usage) {
         usage = {
@@ -206,6 +247,7 @@ export class LlmGateway {
 
   /** Streams output text deltas; the usage row is written when the stream ends (or fails). */
   async *streamText(req: StreamTextRequest): AsyncGenerator<string> {
+    await this.pace(req);
     const started = Date.now();
     let usage: Usage | null = null;
     try {
@@ -216,7 +258,7 @@ export class LlmGateway {
         stream: true,
         store: false,
         ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
-        ...(supportsTemperature(req.model) ? { temperature: 0 } : {}),
+        ...determinism(req),
       });
       for await (const event of stream) {
         if (event.type === "response.output_text.delta" && event.delta) yield event.delta;

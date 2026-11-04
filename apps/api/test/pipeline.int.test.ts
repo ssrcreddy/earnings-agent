@@ -219,6 +219,8 @@ beforeAll(async () => {
     STRONG_MODEL: "test-model",
     // Bag-of-words vectors give lower cosine scores than real embeddings.
     ASK_SIMILARITY_FLOOR: "0.05",
+    // The fake model has no rate limit: never pace it, whatever the local .env says.
+    LLM_TPM_LIMIT: "0",
     GOLDEN_DIR: path.join(tmp, "golden"),
   });
   ctx = createContext(config, {

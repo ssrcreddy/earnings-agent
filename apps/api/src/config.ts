@@ -29,6 +29,12 @@ const Env = z.object({
   REVIEW_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
   /** Extra per-model prices for cost logging: {"model": {"inputPerM": n, "cachedInputPerM": n, "outputPerM": n}}. */
   LLM_PRICES_JSON: z.string().default(""),
+  /** The account's tokens-per-minute limit for the chat model; calls are paced under it. 0 = no pacing. */
+  LLM_TPM_LIMIT: z.coerce.number().int().min(0).default(0),
+  /** Output tokens a call is expected to use (reasoning included), reserved against LLM_TPM_LIMIT. */
+  LLM_OUTPUT_RESERVE: z.coerce.number().int().min(256).default(3000),
+  /** Reasoning effort for extraction on reasoning models; extraction is mostly finding and copying figures. */
+  EXTRACT_REASONING_EFFORT: z.enum(["minimal", "low", "medium", "high"]).default("low"),
   /** Ask refuses without calling the LLM when no chunk is at least this similar to the question (§17). */
   ASK_SIMILARITY_FLOOR: z.coerce.number().min(0).max(1).default(0.25),
   RAW_DATA_DIR: z.string().default("./data/raw"),

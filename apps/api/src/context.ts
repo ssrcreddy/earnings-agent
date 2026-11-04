@@ -6,6 +6,7 @@ import type { Config } from "./config";
 import { GatewayEmbedder, type Embedder } from "./llm/embedder";
 import { LlmGateway, type OpenAILike } from "./llm/gateway";
 import { PriceTable } from "./llm/pricing";
+import { TokenRateLimiter } from "./llm/rateLimit";
 import { createLogger, type Logger } from "./logger";
 import { EdgarClient } from "./sources/edgar";
 import type { Fetcher } from "./sources/http";
@@ -51,7 +52,16 @@ export function createContext(config: Config, overrides: ContextOverrides = {}):
   const client =
     overrides.llmClient ??
     (config.OPENAI_API_KEY ? (new OpenAI({ apiKey: config.OPENAI_API_KEY }) as unknown as OpenAILike) : null);
-  const llm = client ? new LlmGateway(client, db, log, new PriceTable(config.LLM_PRICES_JSON)) : null;
+  const llm = client
+    ? new LlmGateway(
+        client,
+        db,
+        log,
+        new PriceTable(config.LLM_PRICES_JSON),
+        new TokenRateLimiter(config.LLM_TPM_LIMIT),
+        config.LLM_OUTPUT_RESERVE,
+      )
+    : null;
   const embedder = overrides.embedder ?? (llm ? new GatewayEmbedder(llm, config.EMBED_MODEL) : null);
 
   return {

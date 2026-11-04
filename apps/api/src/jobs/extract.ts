@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { chunks, companies, documents, earningsEvents, guidance, metrics, reviewItems, type Db } from "@eia/db";
 import { LlmExtractionResult, nominalEndOf, type DocumentType, type ReviewStatus } from "@eia/shared";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
+import type { Config } from "../config";
 import { withTransaction, type AppContext } from "../context";
+import { SCHEMA_TOKEN_ALLOWANCE } from "../llm/gateway";
+import { countTokens } from "../parsing/chunker";
 import { parseHeadlineTable, type HeadlineFigure } from "../parsing/headline";
 import { cleanHtml } from "../parsing/html";
 import { approxEqual } from "../parsing/numbers";
@@ -16,6 +19,7 @@ import {
   guidanceKey,
   metricKey,
   runExtraction,
+  WINDOW_TOKENS,
   type ExtractionOutcome,
   type Failure,
   type ModelCall,
@@ -77,7 +81,12 @@ export async function extractJob(ctx: AppContext, { documentId }: DocumentPayloa
   };
   const header = extractionHeader(company.ticker, company.name, doc.type, event.fiscalPeriod, vc.periodEnd);
 
-  const outcome = await runExtraction(modelCall, await extractionParts(ctx, doc.id, doc.type, doc.cleanText, header), vc);
+  const outcome = await runExtraction(
+    modelCall,
+    await extractionParts(ctx, doc.id, doc.type, doc.cleanText, header),
+    vc,
+    extractionWindowTokens(ctx.config),
+  );
   const usedModel = call ? "injected" : model;
   return persist(ctx, { doc, event, outcome, model: usedModel });
 }
@@ -97,8 +106,30 @@ export function extractionModelCall(ctx: AppContext, meta: { eventId?: string; d
       input,
       schema: LlmExtractionResult,
       schemaName: "extraction_result",
+      reasoningEffort: ctx.config.EXTRACT_REASONING_EFFORT,
+      // A ceiling, not a target: reasoning models spend hidden reasoning tokens from this budget.
       maxOutputTokens: 8000,
     });
+}
+
+/** Room left for the request header and retry notes in each call. */
+const HEADER_ALLOWANCE = 400;
+
+/**
+ * Document tokens per extraction call. Under a tokens-per-minute limit, a window must leave room
+ * for the instructions, schema, header and expected output; otherwise the default window applies.
+ */
+export function extractionWindowTokens(config: Pick<Config, "LLM_TPM_LIMIT" | "LLM_OUTPUT_RESERVE">): number {
+  if (!config.LLM_TPM_LIMIT) return WINDOW_TOKENS;
+  // The gateway reserves input x 1.1 + output; solve for the document's share of the limit.
+  const inputBudget = (config.LLM_TPM_LIMIT - config.LLM_OUTPUT_RESERVE) / 1.1;
+  const window = Math.floor(inputBudget - countTokens(EXTRACT_INSTRUCTIONS) - SCHEMA_TOKEN_ALLOWANCE - HEADER_ALLOWANCE);
+  if (window < 1000) {
+    throw new Error(
+      `LLM_TPM_LIMIT ${config.LLM_TPM_LIMIT} leaves only ${window} document tokens per call; raise the limit or lower LLM_OUTPUT_RESERVE`,
+    );
+  }
+  return Math.min(window, WINDOW_TOKENS);
 }
 
 /** The request header every extraction call carries: company, document and the period in force. */

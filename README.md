@@ -41,13 +41,23 @@ All five phases of the MVP are built. The model-dependent parts are tested with 
 - Golden set: 7 cases from real releases (4 NVIDIA quarters, 3 VST quarters), with 23 headline figures, 7 guidance items with expected labels (NVIDIA's quarterly outlooks are each new; VST's 2026 free-cash-flow range is new, then maintained twice), and 3 Ask questions. The values were taken from each release's headline table and outlook, and checked by eye against the source rows; please spot-check them before relying on the accuracy numbers. Every correction made in the review screen adds to this set.
 - The web app is in Docker Compose (a standalone Next.js server on port 3000).
 
+### Live results (gpt-5.5-2026-04-23)
+On two golden cases (`NVDA-2027-Q2` and `VST-2026-Q2`):
+- **Extraction accuracy:** 100% (6 of 6 headline figures, none wrong or missing).
+- **Citation precision:** 100% (44 of 44).
+- **Usage:** about 1,000 output tokens per call at low reasoning effort.
+
+**Fixed after the first live run:** the eval caught a false "lowered" label on VST's 2026 free-cash-flow guide. The release states that guide twice with different figures: $3,925–4,725M on the guidance line, and an adjusted $3,760–4,560M in a reconciliation table. Merging across windows had kept one of them silently. Now two different values for the same item go to review with both quotes, and the re-run shows no false guidance change.
+
+**Ask is still weak:** recall@5 is 33% (1 of 3) with embeddings on. All candidates score a cosine similarity of 0.69–0.75, so the vector channel barely separates them. NVIDIA's outlook sentence also sits in a long chunk alongside a "Highlights" list, which dilutes it. Tuning the score weights didn't help. The next step is chunking at sub-headings, or the reranker the design names.
+
 ### Not yet verified on real data
-These need `OPENAI_API_KEY` and `STRONG_MODEL` in `.env`:
-- Extraction of real releases (the Phase 3 exit test), and the end-to-end eval numbers.
-- Vector search, the Ask similarity floor and model-written Ask answers.
+- The full 7-case eval (so far run on 2 cases).
+- Model-written Ask answers.
 - Model-written briefs, and checking real briefs' verdicts by hand (the Phase 4 exit test).
 
-Last run of `pnpm eval` without a model: 0 false guidance changes (7 of 7 labels correct), and Ask recall@5 of 66.7% (2 of 3) on keyword search only. The miss is VST's "free cash flow guidance" question: the release writes "FCFbG", which only embeddings can match.
+### Rate limits
+Set `LLM_TPM_LIMIT` to your OpenAI tokens-per-minute limit for `STRONG_MODEL` (Settings > Limits). Calls are then paced under it, and extraction windows are sized so each request fits. `LLM_OUTPUT_RESERVE` (default 3000) is the output a call is expected to use. `EXTRACT_REASONING_EFFORT` (default `low`) controls how much hidden reasoning a reasoning model spends on extraction. `pnpm eval --cases=ID,...` runs a subset of cases, and a case that errors (a rate limit, for example) is recorded and fails the gate rather than crashing the run.
 
 ## Run it (Windows dev loop)
 ```bash

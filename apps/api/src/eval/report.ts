@@ -14,6 +14,10 @@ export interface GateResult {
  */
 export function gate(report: EvalReport, previous: EvalReport | null): GateResult {
   const failures: string[] = [];
+  // A partial run can't pass: an errored case would hide its regressions.
+  if (report.caseErrors?.length) {
+    failures.push(`${report.caseErrors.length} golden case(s) could not run: ${report.caseErrors.map((e) => e.case).join(", ")}`);
+  }
   if (report.guidance.labels.falseChanges > 0) {
     failures.push(`compare produced ${report.guidance.labels.falseChanges} false guidance change(s) on hand-checked values`);
   }
@@ -27,7 +31,9 @@ export function gate(report: EvalReport, previous: EvalReport | null): GateResul
     failures.push(`citation precision ${pct(report.citation.precision)} is below 100%`);
   }
   const now = report.extraction;
-  const before = previous?.extraction;
+  // Regressions are only meaningful against a run over the same cases (not a --cases subset).
+  const sameCases = previous !== null && [...previous.cases].sort().join() === [...report.cases].sort().join();
+  const before = sameCases ? previous?.extraction : undefined;
   if (now && before) {
     if (now.overall.accuracy < before.overall.accuracy) {
       failures.push(`extraction accuracy fell from ${pct(before.overall.accuracy)} to ${pct(now.overall.accuracy)}`);
@@ -120,6 +126,7 @@ export function toMarkdown(r: EvalReport, prev: EvalReport | null, result: GateR
   }
   const mismatches = [...r.guidance.labels.mismatches, ...(r.guidance.extracted?.mismatches ?? [])];
   if (mismatches.length) lines.push("## Guidance label mismatches", "", ...mismatches.map((m) => `- ${m}`), "");
+  if (r.caseErrors?.length) lines.push("## Cases that could not run", "", ...r.caseErrors.map((e) => `- ${e.case}: ${e.message}`), "");
   if (r.retrieval?.misses.length) lines.push("## Retrieval misses", "", ...r.retrieval.misses.map((m) => `- ${m}`), "");
   return `${lines.join("\n")}\n`;
 }

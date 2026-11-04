@@ -53,7 +53,13 @@ let report: EvalReport;
 
 beforeAll(async () => {
   ctx = createContext(
-    loadConfig({ ...process.env, DATABASE_URL: TEST_DB, EDGAR_USER_AGENT: "EarningsAgent/1.0 test test@example.com" }),
+    // LLM_TPM_LIMIT 0: tests must not depend on the local .env's rate-limit settings.
+    loadConfig({
+      ...process.env,
+      DATABASE_URL: TEST_DB,
+      EDGAR_USER_AGENT: "EarningsAgent/1.0 test test@example.com",
+      LLM_TPM_LIMIT: "0",
+    }),
     { log: pino({ level: "silent" }) },
   );
   report = await runEval(ctx, { goldenDir: GOLDEN, call: replay, model: "replay", retrieval: false });
@@ -103,6 +109,29 @@ describe("eval harness", () => {
     const falseChange: EvalReport = JSON.parse(JSON.stringify(report));
     falseChange.guidance.labels.falseChanges = 1;
     expect(gate(falseChange, null).passed).toBe(false);
+  });
+
+  it("records a case that errors (e.g. a rate limit), keeps scoring the rest, and fails the gate", async () => {
+    const flaky: ModelCall = async (input) => {
+      if (input.includes("Fiscal period in force: 2026-Q1")) throw new Error("429 Request too large (tokens per min)");
+      return replay(input);
+    };
+    const partial = await runEval(ctx, {
+      goldenDir: GOLDEN,
+      call: flaky,
+      model: "replay",
+      retrieval: false,
+      only: ["VST-2026-Q1", "VST-2026-Q2"],
+    });
+    expect(partial.cases).toEqual(["VST-2026-Q1", "VST-2026-Q2"]);
+    expect(partial.caseErrors).toEqual([{ case: "VST-2026-Q1", message: "429 Request too large (tokens per min)" }]);
+    expect(partial.extraction!.overall).toMatchObject({ expected: 1, correct: 1 }); // VST-2026-Q2 still scored
+    const result = gate(partial, report); // a different case set: no regression comparison
+    expect(result.passed).toBe(false);
+    expect(result.failures).toEqual(["1 golden case(s) could not run: VST-2026-Q1"]);
+    await expect(runEval(ctx, { goldenDir: GOLDEN, call: replay, model: "x", retrieval: false, only: ["NOPE"] })).rejects.toThrow(
+      /unknown golden case/,
+    );
   });
 
   it("writes a dated JSON + Markdown report that the next run can diff against", async () => {
