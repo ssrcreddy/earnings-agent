@@ -2,7 +2,9 @@
 
 Watches a list of tickers, reads each earnings press release and SEC filing, and produces a factual, fully cited brief. The brief covers what beat or missed, how guidance moved, and what management said, and every number links to the passage it came from. It makes no recommendations. The design is in `Earnings Intelligence Agent HLD and LLD.html`. The build plan, with the agreed changes to that design, is summarised below.
 
-All five phases of the MVP are built. The model-dependent parts are tested with fixtures and a fake model, but they haven't run against a real model yet; see "Not yet verified on real data" below.
+For the project's scope, its users and the AI tools it uses, see the [project overview](docs/OVERVIEW.md).
+
+All five phases of the MVP are built. Extraction and briefs have run against a real model on a small set of reports; see "Live results" and "Not yet verified on real data" below.
 
 ## Status
 **Phase 1 (scaffold and data layer) is done.**
