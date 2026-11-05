@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earnings Intelligence Agent: project overview</title>
+<style>
+:root { --bg:#fff; --text:#1f2328; --muted:#59636e; --border:#d1d9e0; --head:#f6f8fa; --link:#0969da; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0d1117; --text:#e6edf3; --muted:#9198a1; --border:#3d444d; --head:#151b23; --link:#4493f8; }
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+main { max-width:860px; margin:0 auto; padding:32px 16px 64px; }
+h1 { font-size:2rem; margin:0 0 .5em; }
+h2 { font-size:1.4rem; margin:2em 0 .6em; padding-bottom:.3em; border-bottom:1px solid var(--border); }
+h3 { font-size:1.1rem; margin:1.6em 0 .5em; }
+a { color:var(--link); }
+code { font:.875em Consolas, Menlo, monospace; background:var(--head); padding:.15em .35em; border-radius:4px; }
+.table-wrap { overflow-x:auto; margin:1em 0; }
+table { border-collapse:collapse; width:100%; }
+th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+th { background:var(--head); }
+.diagram { overflow-x:auto; margin:1.5em 0; padding:16px; border:1px solid var(--border); border-radius:8px; }
+.diagram pre { margin:0; text-align:center; }
+.diagram svg { max-width:100%; height:auto; }
+</style>
+</head>
+<body>
+<main>
+<h1>Project overview</h1>
+<p>This page explains what the Earnings Intelligence Agent does, who it is for, and how it uses AI. For setup and commands, see the <a href="https://github.com/ssrcreddy/earnings-agent#readme">README</a>.</p>
+<h2>What it is</h2>
+<p>The Earnings Intelligence Agent reads a company&#39;s quarterly earnings documents and reports what changed, with a source quote behind every claim.</p>
+<p>Its core rule is <strong>&quot;The model proposes, the system disposes.&quot;</strong> AI reads the documents and writes the text. Ordinary code checks that work and makes every consequential call, such as a beat/miss verdict or a guidance change label.</p>
+<h2>The problem</h2>
+<p>Each earnings report means hundreds of pages per company, but what matters is the change: against consensus, against last quarter, and against the guidance management gave three months ago.</p>
+<p>Reading for that by hand takes hours per report, even for ten tickers, and mistakes are easy to make:</p>
+<ul>
+<li>A number is copied from the wrong period.</li>
+<li>Guidance language is paraphrased loosely.</li>
+<li>A reiteration is read as a raise.</li>
+</ul>
+<h2>Who it is for</h2>
+<p>The design names one user, the <strong>operator</strong>: a single person following a watchlist. The operator manages tickers, reads briefs and alerts, corrects extractions in the review queue, and asks questions about the documents.</p>
+<p>The design doesn&#39;t name job titles, but the app suits anyone covering a small set of US companies, such as an equity analyst, an individual investor, or a finance researcher. It runs locally and has no user accounts.</p>
+<h2>Scope</h2>
+<h3>In scope</h3>
+<ul>
+<li>Watching a list of up to 10 tickers and detecting new earnings events.</li>
+<li>Ingesting 8-K press releases and 10-Q/10-K filings from SEC EDGAR.</li>
+<li>Extracting revenue, EPS, margins, segment figures and forward guidance, each with a supporting quote.</li>
+<li>Computing beat/miss against consensus, and labelling guidance as raised, lowered, maintained, new or withdrawn.</li>
+<li>Publishing a one-page cited brief for each report.</li>
+<li>A web app with a week view, ticker pages, alerts, a review queue and a costs page.</li>
+<li>Answering questions from the stored documents, with citations.</li>
+<li>Scoring extraction quality against a hand-checked set of answers.</li>
+</ul>
+<h3>Out of scope</h3>
+<ul>
+<li>Trading signals, price predictions, and buy/sell recommendations.</li>
+<li>Real-time or intraday processing.</li>
+<li>Non-US filings, non-English sources, and audio transcription.</li>
+<li>Multiple user accounts and permissions.</li>
+</ul>
+<h2>Goals</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Goal</th>
+<th>How it is measured</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Correctness over coverage</td>
+<td>At least 95% of extracted metrics match the source. A missing metric is acceptable; a wrong one is not.</td>
+</tr>
+<tr>
+<td>Every claim cited</td>
+<td>Every metric and brief statement carries a quote, a document and a location.</td>
+</tr>
+<tr>
+<td>No false guidance changes</td>
+<td>The false &quot;raised&quot; or &quot;lowered&quot; rate on the hand-checked set must be 0.</td>
+</tr>
+<tr>
+<td>Cheap at small scale</td>
+<td>A few dollars per earnings season at 10 tickers, with cost per report logged.</td>
+</tr>
+<tr>
+<td>Rerunnable and auditable</td>
+<td>Any brief can be regenerated from stored sources, and every stage is logged.</td>
+</tr>
+</tbody></table></div>
+<h2>How it works</h2>
+<p>The diagram shows how data moves through the system. Each step says who does the work:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Label</th>
+<th>Colour</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>AI call</strong></td>
+<td>Purple</td>
+<td>Calls an OpenAI model; the label names the model</td>
+</tr>
+<tr>
+<td><strong>Code + AI call</strong></td>
+<td>Purple</td>
+<td>Plain code that also makes one AI call</td>
+</tr>
+<tr>
+<td><strong>No AI</strong></td>
+<td>Blue</td>
+<td>Plain code, with no model involved</td>
+</tr>
+<tr>
+<td><strong>Person</strong></td>
+<td>Green</td>
+<td>The operator decides</td>
+</tr>
+</tbody></table></div>
+<div class="diagram"><pre class="mermaid">flowchart TD
+    EDGAR[/&quot;SEC EDGAR: 8-K, 10-Q, 10-K&quot;/]
+    Finnhub[/&quot;Finnhub: consensus estimates&quot;/]
+
+    Discover[&quot;No AI&lt;br/&gt;Discover new earnings events&quot;]
+    Ingest[&quot;No AI&lt;br/&gt;Ingest documents&quot;]
+    Parse[&quot;No AI&lt;br/&gt;Parse, label sections, chunk&quot;]
+    Embed[&quot;AI call: text-embedding-3-small&lt;br/&gt;Create embeddings&quot;]
+    Extract[&quot;AI call: gpt-5.5&lt;br/&gt;Extract metrics and guidance with quotes&quot;]
+    Validate{&quot;No AI&lt;br/&gt;Validate quotes and numbers&quot;}
+    Review[&quot;Person&lt;br/&gt;Review queue: approve or correct&quot;]
+    Compare[&quot;No AI&lt;br/&gt;Compare: beat/miss, guidance change&quot;]
+    Brief[&quot;AI call: gpt-5.5&lt;br/&gt;Write the brief&quot;]
+    Check{&quot;No AI&lt;br/&gt;Post-check the draft&quot;}
+    Withheld[&quot;No AI&lt;br/&gt;Brief withheld&quot;]
+
+    Raw[(&quot;Raw files&quot;)]
+    DB[(&quot;Postgres + pgvector&quot;)]
+    Golden[(&quot;Hand-checked answers&quot;)]
+    Web[&quot;Web app: week view, ticker pages, briefs, alerts&quot;]
+
+    Question([&quot;Question&quot;])
+    Search[&quot;Code + AI call: text-embedding-3-small&lt;br/&gt;Hybrid search: vectors + keywords&quot;]
+    Answer[&quot;AI call: gpt-5.5&lt;br/&gt;Write a cited answer&quot;]
+
+    EDGAR --&gt; Discover --&gt; Ingest --&gt; Parse
+    Ingest --&gt; Raw
+    Parse --&gt; Embed --&gt; DB
+    Parse --&gt; Extract --&gt; Validate
+    Validate -- passes --&gt; Compare
+    Validate -- doubtful --&gt; Review
+    Review -- approved --&gt; Compare
+    Review -- corrections --&gt; Golden
+    Finnhub --&gt; Compare
+    Compare --&gt; Brief --&gt; Check
+    Check -- passes --&gt; DB
+    Check -- fails twice --&gt; Withheld
+    DB --&gt; Web
+
+    Question --&gt; Search
+    DB --&gt; Search
+    Search --&gt; Answer
+
+    classDef ai fill:#e9dcff,stroke:#6b3fc4,color:#1f1147
+    classDef code fill:#dcecff,stroke:#2a6fc4,color:#0d2747
+    classDef human fill:#dcf5e3,stroke:#2a9d55,color:#0d3b1e
+    class Embed,Extract,Brief,Search,Answer ai
+    class Discover,Ingest,Parse,Validate,Compare,Check,Withheld code
+    class Review human
+</pre></div>
+<p>The steps in order:</p>
+<ol>
+<li><strong>Discover:</strong> finds new earnings events for the watchlist.</li>
+<li><strong>Ingest:</strong> downloads the documents from EDGAR and stores the originals.</li>
+<li><strong>Parse:</strong> cleans the text, labels sections, splits it into chunks and creates embeddings.</li>
+<li><strong>Extract:</strong> the model returns metrics and guidance with quotes.</li>
+<li><strong>Validate:</strong> code checks every quote and number. Anything doubtful goes to the review queue.</li>
+<li><strong>Compare:</strong> code computes beat/miss and guidance changes.</li>
+<li><strong>Brief:</strong> the model writes from the approved facts, and code checks the draft before it is published.</li>
+</ol>
+<h2>AI components</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Tool</th>
+<th>What the AI does</th>
+<th>What checks it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Extraction</td>
+<td>OpenAI <code>gpt-5.5</code>, Responses API with structured output</td>
+<td>Reads filings and returns metrics and guidance with quotes</td>
+<td>Code confirms each quote is in the document word for word and contains the number. Doubtful items go to review.</td>
+</tr>
+<tr>
+<td>Brief writing</td>
+<td>OpenAI <code>gpt-5.5</code></td>
+<td>Turns approved facts into a short brief</td>
+<td>A post-check requires every figure to be cited and bans recommendation language. A failed draft gets one retry, then the brief is withheld.</td>
+</tr>
+<tr>
+<td>Embeddings</td>
+<td>OpenAI <code>text-embedding-3-small</code>, stored in pgvector</td>
+<td>Turns document chunks into vectors for search</td>
+<td>Combined with keyword search, so results don&#39;t rely on vectors alone.</td>
+</tr>
+<tr>
+<td>Ask (retrieval-augmented answers)</td>
+<td>Hybrid search plus OpenAI <code>gpt-5.5</code></td>
+<td>Answers questions from retrieved chunks, with citations</td>
+<td>Refuses when it finds nothing relevant.</td>
+</tr>
+</tbody></table></div>
+<h3>Supporting AI engineering</h3>
+<ul>
+<li><strong>Eval harness:</strong> <code>pnpm eval</code> runs the real pipeline against hand-checked answers. A gate fails on a false guidance change or a drop in accuracy.</li>
+<li><strong>Versioned prompts:</strong> prompts are stored as files such as <code>extract.v2.md</code>, and a change must pass the eval.</li>
+<li><strong>LLM gateway:</strong> one layer handles every model call, logging tokens and cost, and pacing requests to stay within rate limits.</li>
+<li><strong>Human review:</strong> corrections are never overwritten by a later run, and they feed back into the hand-checked answers.</li>
+</ul>
+<h3>What AI does not do</h3>
+<p>These are plain code, so the results are repeatable and auditable:</p>
+<ul>
+<li>Beat/miss verdicts and guidance change labels.</li>
+<li>Fiscal period logic and section labelling.</li>
+<li>Number formatting and quote checking.</li>
+</ul>
+<h2>Technology</h2>
+<ul>
+<li><strong>Language and runtime:</strong> TypeScript on Node 24, in a pnpm monorepo.</li>
+<li><strong>API and jobs:</strong> Fastify, with pg-boss for background jobs.</li>
+<li><strong>Data:</strong> Postgres 17 with pgvector, accessed through Drizzle.</li>
+<li><strong>Web app:</strong> Next.js and Tailwind.</li>
+<li><strong>Testing:</strong> Vitest.</li>
+</ul>
+<h2>Current state (November 2026)</h2>
+<ul>
+<li><strong>Working:</strong> the full flow has run on a real report, Vistra (VST) Q2 2026. On two hand-checked cases, the eval showed 100% extraction accuracy, 100% citation precision and no false guidance changes.</li>
+<li><strong>Not yet run:</strong> the full 7-case eval.</li>
+<li><strong>Switched off:</strong> call transcripts, so Ask only covers filings and press releases.</li>
+<li><strong>Needs a provider key:</strong> consensus data. Without a Finnhub key, briefs show no beat/miss verdicts.</li>
+<li><strong>Weak:</strong> Ask finds the right passage in its top 5 results only 33% of the time, against a 90% target. The web app has no Ask page yet, so Ask is available through the API only.</li>
+</ul>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+if (window.mermaid) {
+  var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default" });
+}
+</script>
+</body>
+</html>
