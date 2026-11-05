@@ -49,6 +49,69 @@ The design doesn't name job titles, but the app suits anyone covering a small se
 | Rerunnable and auditable | Any brief can be regenerated from stored sources, and every stage is logged. |
 
 ## How it works
+The diagram shows how data moves through the system. Each step says who does the work:
+
+| Label | Colour | Meaning |
+|---|---|---|
+| **AI call** | Purple | Calls an OpenAI model; the label names the model |
+| **Code + AI call** | Purple | Plain code that also makes one AI call |
+| **No AI** | Blue | Plain code, with no model involved |
+| **Person** | Green | The operator decides |
+
+```mermaid
+flowchart TD
+    EDGAR[/"SEC EDGAR: 8-K, 10-Q, 10-K"/]
+    Finnhub[/"Finnhub: consensus estimates"/]
+
+    Discover["No AI<br/>Discover new earnings events"]
+    Ingest["No AI<br/>Ingest documents"]
+    Parse["No AI<br/>Parse, label sections, chunk"]
+    Embed["AI call: text-embedding-3-small<br/>Create embeddings"]
+    Extract["AI call: gpt-5.5<br/>Extract metrics and guidance with quotes"]
+    Validate{"No AI<br/>Validate quotes and numbers"}
+    Review["Person<br/>Review queue: approve or correct"]
+    Compare["No AI<br/>Compare: beat/miss, guidance change"]
+    Brief["AI call: gpt-5.5<br/>Write the brief"]
+    Check{"No AI<br/>Post-check the draft"}
+    Withheld["No AI<br/>Brief withheld"]
+
+    Raw[("Raw files")]
+    DB[("Postgres + pgvector")]
+    Golden[("Hand-checked answers")]
+    Web["Web app: week view, ticker pages, briefs, alerts"]
+
+    Question(["Question"])
+    Search["Code + AI call: text-embedding-3-small<br/>Hybrid search: vectors + keywords"]
+    Answer["AI call: gpt-5.5<br/>Write a cited answer"]
+
+    EDGAR --> Discover --> Ingest --> Parse
+    Ingest --> Raw
+    Parse --> Embed --> DB
+    Parse --> Extract --> Validate
+    Validate -- passes --> Compare
+    Validate -- doubtful --> Review
+    Review -- approved --> Compare
+    Review -- corrections --> Golden
+    Finnhub --> Compare
+    Compare --> Brief --> Check
+    Check -- passes --> DB
+    Check -- fails twice --> Withheld
+    DB --> Web
+
+    Question --> Search
+    DB --> Search
+    Search --> Answer
+
+    classDef ai fill:#e9dcff,stroke:#6b3fc4,color:#1f1147
+    classDef code fill:#dcecff,stroke:#2a6fc4,color:#0d2747
+    classDef human fill:#dcf5e3,stroke:#2a9d55,color:#0d3b1e
+    class Embed,Extract,Brief,Search,Answer ai
+    class Discover,Ingest,Parse,Validate,Compare,Check,Withheld code
+    class Review human
+```
+
+The steps in order:
+
 1. **Discover:** finds new earnings events for the watchlist.
 2. **Ingest:** downloads the documents from EDGAR and stores the originals.
 3. **Parse:** cleans the text, labels sections, splits it into chunks and creates embeddings.
