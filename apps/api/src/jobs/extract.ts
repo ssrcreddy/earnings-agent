@@ -28,7 +28,7 @@ import {
 } from "../services/extraction";
 import { VALUE_TOLERANCE, type ValidationContext } from "../services/validate";
 
-export const EXTRACT_PROMPT_VERSION = "extract.v1";
+export const EXTRACT_PROMPT_VERSION = "extract.v2";
 const EXTRACT_INSTRUCTIONS = readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), "../llm/prompts", `${EXTRACT_PROMPT_VERSION}.md`),
   "utf8",
@@ -264,6 +264,22 @@ async function persist(
           candidate: g,
           errors: [`guidance ${g.metric} ${g.targetPeriod}: this ${describe(doc.type)} disagrees with the guide already recorded`],
         });
+      }
+    }
+
+    // Re-extraction replaces this document's machine-made rows: drop those it no longer produced.
+    // Human-reviewed rows always stay.
+    const keptMetrics = new Set(outcome.metrics.map((v) => metricKey(v.item)));
+    for (const m of existingMetrics.values()) {
+      if (m.documentId === doc.id && !isHumanReviewed(m.reviewStatus) && !keptMetrics.has(metricKey(m))) {
+        await tx.db.delete(metrics).where(eq(metrics.id, m.id));
+      }
+    }
+    const keptGuidance = new Set(outcome.guidance.map((v) => guidanceKey(v.item)));
+    for (const g of existingGuidance.values()) {
+      if (g.documentId === doc.id && !isHumanReviewed(g.reviewStatus) && !keptGuidance.has(guidanceKey(g))) {
+        await tx.db.update(guidance).set({ prevGuidanceId: null }).where(eq(guidance.prevGuidanceId, g.id));
+        await tx.db.delete(guidance).where(eq(guidance.id, g.id));
       }
     }
 

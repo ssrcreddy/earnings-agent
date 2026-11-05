@@ -43,7 +43,18 @@ export type GuidanceVerdict =
 const label = (m: { name: string; segment: string | null; periodType: string }) =>
   `${m.name}${m.segment ? ` (${m.segment})` : ""} [${m.periodType}]`;
 
-export function validateMetric(m: LlmMetric, vc: ValidationContext): MetricVerdict {
+/**
+ * Spending metrics are stored as positive amounts. Cash-flow tables print outflows in parentheses,
+ * so the sign in a quote says nothing about the figure: compare magnitudes and normalise.
+ */
+/** A guidance row may hold a label, a low and a high; anything wider is a reconciliation table. */
+const MAX_GUIDANCE_ROW_CELLS = 3;
+
+export const UNSIGNED_METRICS = new Set<string>(["capex"]);
+
+export function validateMetric(raw: LlmMetric, vc: ValidationContext): MetricVerdict {
+  const unsigned = UNSIGNED_METRICS.has(raw.name);
+  const m = unsigned ? { ...raw, value: Math.abs(raw.value) } : raw;
   const errors: string[] = [];
   const parsed = ExtractedMetric.safeParse(m);
   if (!parsed.success) errors.push(...parsed.error.issues.map((i) => `${label(m)}: ${i.path.join(".")} ${i.message}`));
@@ -59,7 +70,7 @@ export function validateMetric(m: LlmMetric, vc: ValidationContext): MetricVerdi
   const facts = factValues(vc.facts, m.name, m.periodType, vc.periodEnd, vc.fiscalPeriod);
   const factsCheck: FactsCheck =
     facts.length === 0 ? "unavailable" : facts.some((f) => approxEqual(f, m.value, VALUE_TOLERANCE)) ? "match" : "mismatch";
-  if (found && !valueInQuote(m.value, m.unit, m.quote, vc.text, found.start) && factsCheck !== "match") {
+  if (found && !valueInQuote(m.value, m.unit, m.quote, vc.text, found.start, unsigned) && factsCheck !== "match") {
     errors.push(`${label(m)}: value ${m.value} does not appear in its quote and is not confirmed by company facts`);
   }
 
@@ -75,7 +86,13 @@ export function validateMetric(m: LlmMetric, vc: ValidationContext): MetricVerdi
   return { ok: true, item: parsed.data, charStart: found.start, charEnd: found.end, facts: factsCheck };
 }
 
-export function validateGuidance(g: LlmGuidance, vc: ValidationContext): GuidanceVerdict {
+export function validateGuidance(raw: LlmGuidance, vc: ValidationContext): GuidanceVerdict {
+  const unsigned = UNSIGNED_METRICS.has(raw.metric);
+  let g = raw;
+  if (unsigned && raw.low !== null && raw.high !== null) {
+    const [a, b] = [Math.abs(raw.low), Math.abs(raw.high)];
+    g = { ...raw, low: Math.min(a, b), high: Math.max(a, b) };
+  }
   const errors: string[] = [];
   const name = `guidance ${g.metric} ${g.targetPeriod}`;
   const parsed = ExtractedGuidance.safeParse(g);
@@ -96,11 +113,17 @@ export function validateGuidance(g: LlmGuidance, vc: ValidationContext): Guidanc
     errors.push(`${name}: target period is outside ${eventYear}-${eventYear + 2}`);
   }
 
+  // A row with several columns of figures is a reconciliation, not a statement of guidance: which
+  // column is "the guide" is ambiguous, and picking wrongly produces a false raised/lowered.
+  if (g.quote.split(" | ").length > MAX_GUIDANCE_ROW_CELLS) {
+    errors.push(`${name}: quote is a multi-column table row - use the company's own statement of the guide, or leave it out`);
+  }
+
   const found = locateQuote(vc.text, g.quote);
   if (!found) errors.push(`${name}: quote not found verbatim in the document - re-extract with an exact quote`);
 
   const unit = METRIC_DEFS[g.metric]?.unit ?? "usd";
-  if (found && g.low !== null && g.high !== null && !guidanceValuesInQuote(g.low, g.high, unit, g.quote, vc.text, found.start)) {
+  if (found && g.low !== null && g.high !== null && !guidanceValuesInQuote(g.low, g.high, unit, g.quote, vc.text, found.start, unsigned)) {
     errors.push(`${name}: low/high ${g.low}/${g.high} do not appear in the quote`);
   }
 
@@ -165,10 +188,12 @@ function captionScaleAt(text: string, quoteStart: number, quote: string): number
   return tableScaleIn(quote) ?? tableScaleIn(text.slice(Math.max(0, quoteStart - SCALE_LOOKBACK), quoteStart));
 }
 
-export function valueInQuote(value: number, unit: string, quote: string, text: string, quoteStart: number): boolean {
+export function valueInQuote(value: number, unit: string, quote: string, text: string, quoteStart: number, unsigned = false): boolean {
   const scale = captionScaleAt(text, quoteStart, quote);
   return findNumbers(quote).some((t) =>
-    candidates(t, unit, scale).some((c) => approxEqual(c.value, value, VALUE_TOLERANCE, c.slack)),
+    candidates(t, unit, scale).some((c) =>
+      approxEqual(unsigned ? Math.abs(c.value) : c.value, value, VALUE_TOLERANCE, c.slack),
+    ),
   );
 }
 
@@ -176,10 +201,10 @@ export function valueInQuote(value: number, unit: string, quote: string, text: s
  * Guidance bounds appear in the quote either directly ("$63 billion to $67 billion") or as a
  * midpoint with a stated spread ("$65.0 billion, plus or minus 2%" / "plus or minus 50 basis points").
  */
-function guidanceValuesInQuote(low: number, high: number, unit: string, quote: string, text: string, start: number): boolean {
-  if (valueInQuote(low, unit, quote, text, start) && valueInQuote(high, unit, quote, text, start)) return true;
+function guidanceValuesInQuote(low: number, high: number, unit: string, quote: string, text: string, start: number, unsigned = false): boolean {
+  if (valueInQuote(low, unit, quote, text, start, unsigned) && valueInQuote(high, unit, quote, text, start, unsigned)) return true;
   const mid = (low + high) / 2;
-  if (!valueInQuote(mid, unit, quote, text, start)) return false;
+  if (!valueInQuote(mid, unit, quote, text, start, unsigned)) return false;
   const pct = /plus or minus\s+(\d+(?:\.\d+)?)\s*%/i.exec(quote);
   if (pct) {
     const d = (Math.abs(mid) * Number(pct[1])) / 100;

@@ -535,7 +535,7 @@ describe("Phase 3 extraction: validate, retry once, route to review", () => {
     expect(String(req.input)).toMatch(/<document>\n[\s\S]*<\/document>$/);
     const calls = await ctx.db.select().from(llmCalls).where(eq(llmCalls.purpose, "extract"));
     expect(calls).toHaveLength(3);
-    expect(calls.every((c) => c.promptVersion === "extract.v1" && c.inputTokens === 5000 && c.ok)).toBe(true);
+    expect(calls.every((c) => c.promptVersion === "extract.v2" && c.inputTokens === 5000 && c.ok)).toBe(true);
   });
 
   it("holds the event in needs_review until a human has looked", async () => {
@@ -783,7 +783,7 @@ describe("Phase 4 compare and brief", () => {
     expect(String(briefRequests[1]!.input)).toMatch(/\$999 million.*not a fact-sheet value/);
 
     const [brief] = await ctx.db.select().from(briefs).where(eq(briefs.eventId, eventId));
-    expect(brief).toMatchObject({ version: 1, model: "test-model", promptVersion: "brief.v1", bodyMd: GOOD_BRIEF });
+    expect(brief).toMatchObject({ version: 1, model: "test-model", promptVersion: "brief.v2", bodyMd: GOOD_BRIEF });
     expect(Object.keys(brief!.citations).sort()).toEqual(["G1", "M1"]);
 
     const [event] = await ctx.db.select().from(earningsEvents).where(eq(earningsEvents.id, eventId));

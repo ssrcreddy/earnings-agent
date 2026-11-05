@@ -30,11 +30,15 @@ const SCALE_WORDS: Record<string, number> = {
 const NUMBER_RE =
   /(-|−|\()?\s*(\$|€|£)?\s*(\()?\s*(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?\s*(\))?\s*(%|percent\b|(?:trillion|billion|million|thousand|bn|mm)\b|[BMK]\b)?/gi;
 
+// A dash right after a figure joins a range ("$3,925 - $4,725"); it is not a minus sign.
+const RANGE_START = /(?:[\d%)]|\b(?:trillion|billion|million|thousand|bn|mm))\s*$/i;
+
 export function findNumbers(text: string): NumberToken[] {
   const out: NumberToken[] = [];
   for (const m of text.matchAll(NUMBER_RE)) {
     const [whole, sign, currency, innerParen, intPart, frac, closeParen, suffix] = m;
-    const negative = sign === "-" || sign === "−" || ((sign === "(" || innerParen === "(") && closeParen === ")");
+    const dash = (sign === "-" || sign === "−") && !RANGE_START.test(text.slice(Math.max(0, m.index - 12), m.index));
+    const negative = dash || ((sign === "(" || innerParen === "(") && closeParen === ")");
     const n = Number(`${intPart!.replace(/,/g, "")}${frac ?? ""}`);
     const suf = suffix?.toLowerCase();
     const percent = suf === "%" || suf === "percent";

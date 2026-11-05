@@ -32,9 +32,37 @@ export interface GuidanceFact {
   low: number | null;
   high: number | null;
   change: GuidanceChange | null;
+  /** Replaces the word "new" when the guide may only look new because earlier quarters aren't processed. */
+  changeNote?: string | null;
   previous: { low: number | null; high: number | null; fiscalPeriod: string; quote: string } | null;
   fromQa: boolean;
   quote: string;
+}
+
+/** A brief is one page: real segments only, and only this many of them. */
+const MAX_BRIEF_SEGMENTS = 6;
+
+/** Table columns such as totals and eliminations aren't business segments. */
+export function isReportableSegment(label: string): boolean {
+  return !/consolidated|eliminat|total|ongoing operations|corp(orate)?\b.*other/i.test(label);
+}
+
+/**
+ * The metrics a brief covers: company-wide quarter and full-year figures, then real segments for the
+ * quarter. Year-to-date and other figures stay in the database, off the page.
+ */
+export function selectBriefMetrics<T extends { periodType: string; segment: string | null }>(rows: T[]): T[] {
+  const consolidated = rows.filter((m) => m.segment === null && m.periodType !== "ytd");
+  const segments = rows
+    .filter((m) => m.segment !== null && m.periodType === "quarter" && isReportableSegment(m.segment))
+    .slice(0, MAX_BRIEF_SEGMENTS);
+  const selected = [...consolidated, ...segments];
+  return selected.length ? selected : rows.filter((m) => m.segment === null);
+}
+
+/** A table row is data, not something management said, so it can't be quoted as a statement. */
+export function statementQuote(quote: string): string | null {
+  return quote.includes(" | ") ? null : quote;
 }
 
 export interface FactSheet {

@@ -8,6 +8,7 @@ import {
   formatTargetPeriod,
   guidanceUnit,
   metricLabel,
+  statementQuote,
   type FactSheet,
   type GuidanceFact,
   type MetricFact,
@@ -52,7 +53,7 @@ function resultLine(m: MetricFact): string {
     const yoy = m.yoyPct !== null ? ` (${formatPct(m.yoyPct)})` : "";
     comparison = `versus ${formatFigure(m.priorYear, m.unit)} a year earlier${yoy}`;
   } else {
-    comparison = "with no consensus or prior-year figure on record";
+    return `- ${what}: ${value}${derived} [${m.id}]`;
   }
   return `- ${what}: ${value}${derived}, ${comparison} [${m.id}]`;
 }
@@ -66,7 +67,7 @@ function guidanceLine(g: GuidanceFact): string {
   const prev = g.previous ? formatGuide(g.previous.low, g.previous.high, unit) : null;
   switch (g.change) {
     case "new":
-      return `- ${what}: ${range}, new guidance [${g.id}]`;
+      return `- ${what}: ${range}, ${g.changeNote ?? "new guidance"} [${g.id}]`;
     case "maintained":
       return `- ${what}: ${range}, maintained [${g.id}]`;
     case null:
@@ -91,7 +92,7 @@ function headline(sheet: FactSheet): string {
     ids.push(main.id);
   }
   if (guide) {
-    const change = guide.change ?? (guide.kind === "qualitative" ? "stated qualitatively" : "not compared");
+    const change = guide.changeNote ?? guide.change ?? (guide.kind === "qualitative" ? "stated qualitatively" : "not compared");
     parts.push(`${formatTargetPeriod(guide.targetPeriod)} ${metricLabel(guide.metric).toLowerCase()} guidance ${change}`);
     ids.push(guide.id);
   }
@@ -108,7 +109,7 @@ export function renderTemplateBrief(sheet: FactSheet): string {
   if (sheet.metrics.length) lines.push("### Results", ...sheet.metrics.map(resultLine), "");
   if (sheet.guidance.length) lines.push("### Guidance", ...sheet.guidance.map(guidanceLine), "");
 
-  const said = sheet.guidance.filter((g) => g.quote);
+  const said = sheet.guidance.filter((g) => statementQuote(g.quote));
   if (said.length) {
     const prepared = said.filter((g) => !g.fromQa);
     const qa = said.filter((g) => g.fromQa);
@@ -159,13 +160,14 @@ export function briefInput(sheet: FactSheet, errors: string[] | null): string {
       targetPeriod: formatTargetPeriod(g.targetPeriod),
       kind: g.kind,
       change: g.change,
+      changeNote: g.changeNote ?? null,
       fromQa: g.fromQa,
       display: {
         range: formatGuide(g.low, g.high, guidanceUnit(g.metric)),
         previous: g.previous ? formatGuide(g.previous.low, g.previous.high, guidanceUnit(g.metric)) : null,
         previousPeriod: g.previous?.fiscalPeriod ?? null,
       },
-      quote: g.quote,
+      quote: statementQuote(g.quote),
     })),
   };
   const retry = errors

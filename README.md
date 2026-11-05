@@ -21,7 +21,7 @@ All five phases of the MVP are built. The model-dependent parts are tested with 
 - Hybrid retrieval (vector plus full-text) behind `POST /ask`, which streams NDJSON or refuses
 
 **Phase 3 (extraction and review) is done.**
-- Structured extraction through the gateway, using the versioned prompt `extract.v1`. A press release is read whole; a 10-Q or 10-K is read by its MD&A section, in windows of up to 24k tokens.
+- Structured extraction through the gateway, using the versioned prompt `extract.v2`. A press release is read whole; a 10-Q or 10-K is read by its MD&A section, in windows of up to 24k tokens.
 - A validator checks every item in plain code: the quote is found verbatim, the value appears in the quote or is confirmed by EDGAR company facts within 0.5%, the figure is sane, and it agrees with the headline-table regex pre-pass.
 - One retry carries the specific errors. What still fails goes to the `review_items` queue. Validated items below the 0.85 confidence threshold wait as pending.
 - Review API (`GET /review`, `PATCH /review/:kind/:id`), and `POST /events/:id/reprocess` to requeue parsing or extraction.
@@ -30,7 +30,7 @@ All five phases of the MVP are built. The model-dependent parts are tested with 
 **Phase 4 (compare and briefs) is done.**
 - A pure compare service in decimal arithmetic. It calls beat, miss or in line against materiality bands (±1% revenue, ±2% EPS, ±0.5 pt margins), with the band edge counting as in line. It labels guidance raised, lowered, maintained, narrowed, widened, new or withdrawn from two stored rows, records the inputs behind each label, and never infers a direction from qualitative guidance.
 - Q4 is derived as the full year minus the nine-month year to date (fix 6), and marked as derived.
-- Briefs are written from a fact sheet of compared, approved facts only. A post-check requires every figure to be a cited fact-sheet value, every cited ID to exist, and no recommendation language. A failed draft is regenerated once, then the brief is withheld. With `STRONG_MODEL` set, the model writes the brief (`brief.v1`); otherwise a deterministic template does, through the same check.
+- Briefs are written from a fact sheet of compared, approved facts only. A post-check requires every figure to be a cited fact-sheet value, every cited ID to exist, and no recommendation language. A failed draft is regenerated once, then the brief is withheld. With `STRONG_MODEL` set, the model writes the brief (`brief.v2`); otherwise a deterministic template does, through the same check.
 - Briefs are versioned, never edited in place, and every publication adds an alert.
 - `GET /events/:id/brief`, `GET /briefs` and `GET /documents/:id/context`. The web pages `/briefs` and `/brief/[eventId]` open each citation's passage, highlighted in its source document.
 
@@ -44,10 +44,13 @@ All five phases of the MVP are built. The model-dependent parts are tested with 
 ### Live results (gpt-5.5-2026-04-23)
 On two golden cases (`NVDA-2027-Q2` and `VST-2026-Q2`):
 - **Extraction accuracy:** 100% (6 of 6 headline figures, none wrong or missing).
-- **Citation precision:** 100% (44 of 44).
+- **Citation precision:** 100% (37 of 37).
+- **False guidance changes:** 0 of 2, with both labelled guides extracted.
 - **Usage:** about 1,000 output tokens per call at low reasoning effort.
 
 **Fixed after the first live run:** the eval caught a false "lowered" label on VST's 2026 free-cash-flow guide. The release states that guide twice with different figures: $3,925–4,725M on the guidance line, and an adjusted $3,760–4,560M in a reconciliation table. Merging across windows had kept one of them silently. Now two different values for the same item go to review with both quotes, and the re-run shows no false guidance change.
+
+**Fixed with `extract.v2`:** a first draft of this prompt told the model to use a table's consolidated column, which brought the false "lowered" back from that same reconciliation table. Guidance now has to come from the company's own statement, and the validator rejects multi-column rows. The number parser also read the second figure in "$3,925 - $4,725" as negative; a dash after a figure now counts as a range.
 
 **Ask is still weak:** recall@5 is 33% (1 of 3) with embeddings on. All candidates score a cosine similarity of 0.69–0.75, so the vector channel barely separates them. NVIDIA's outlook sentence also sits in a long chunk alongside a "Highlights" list, which dilutes it. Tuning the score weights didn't help. The next step is chunking at sub-headings, or the reranker the design names.
 
@@ -92,6 +95,9 @@ To run the full stack reproducibly, use `docker compose -f infra/docker-compose.
 - **10-Q/10-K extraction reads MD&A only:** figures that appear only in the financial statements are left to the press release. A filing with no MD&A heading found is read whole.
 - **Review list:** `GET /review` returns the oldest 50 items and the total. Cursor pagination is still to do.
 - **Human decisions stick:** re-extraction never overwrites an approved or corrected value, and never reopens a rejected item.
+- **Capex is stored as a positive amount,** whichever sign the filing or the model uses. Other metrics keep their sign, so a loss stays a loss.
+- **Guidance comes from the company's own statement of it.** A quote from a table row with more than three cells is rejected, because the column that holds "the guide" is ambiguous there. A guide stated only in a reconciliation table is therefore left out and needs adding by hand in review.
+- **Briefs leave off year-to-date figures and table columns that aren't segments** (totals, eliminations, "Ongoing Operations"), and show at most 6 segments. A guide with no earlier record reads "first on record" when earlier quarters haven't been processed, not "new".
 - **Consensus comes from the provider only:** with no `PROVIDER_API_KEY`, every verdict is `no_consensus`, and the brief compares results with the prior year instead. Finnhub's free tier covers EPS and revenue consensus only.
 - **Brief verdicts compare consolidated quarterly figures only.** Year-to-date and segment figures are reported without a verdict.
 - **Eval extraction runs offline:** it doesn't use company facts, so in the eval every value must appear in its quote.

@@ -90,7 +90,12 @@ describe("eval harness", () => {
 
   it("re-checks every citation independently", () => {
     expect(report.citation).toMatchObject({ precision: 1 });
-    expect(report.citation!.checked).toBe(22 + 7);
+    // 22 metrics + the guides that pass validation; the golden set grows with review corrections, and
+    // a guide corrected from a multi-column row is rejected when replayed as a model answer.
+    const guides = loadCases(GOLDEN)
+      .flatMap((c) => c.golden.guidance)
+      .filter((g) => g.quote.split(" | ").length <= 3).length;
+    expect(report.citation!.checked).toBe(22 + guides);
   });
 
   it("reproduces every hand-checked guidance label with no false changes, from golden values and from extraction", () => {

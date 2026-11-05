@@ -99,14 +99,18 @@ export class GoldenStore {
 
     if ("metric" in item) {
       const m = item.metric;
-      golden.metrics = golden.metrics.filter(
-        (x) => !(x.name === m.name && x.segment === m.segment && x.periodType === m.periodType),
-      );
-      golden.metrics.push(m);
+      const same = (x: GoldenMetric) => x.name === m.name && x.segment === m.segment && x.periodType === m.periodType;
+      const prior = golden.metrics.find(same);
+      golden.metrics = golden.metrics.filter((x) => !same(x));
+      golden.metrics.push({ ...prior, ...m });
     } else {
       const g = item.guidance;
-      golden.guidance = golden.guidance.filter((x) => !(x.metric === g.metric && x.targetPeriod === g.targetPeriod));
-      golden.guidance.push(g);
+      const same = (x: GoldenGuidance) => x.metric === g.metric && x.targetPeriod === g.targetPeriod;
+      const prior = golden.guidance.find(same);
+      golden.guidance = golden.guidance.filter((x) => !same(x));
+      // A correction updates the values; hand-checked fields it doesn't set (previous guide, expected
+      // label) must survive, or the eval silently stops gating this case.
+      golden.guidance.push({ ...prior, ...g });
     }
     golden.updatedAt = new Date().toISOString();
 

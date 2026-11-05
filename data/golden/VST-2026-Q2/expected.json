@@ -26,17 +26,28 @@
   ],
   "guidance": [
     {
+      "metric": "net_income",
+      "kind": "range",
+      "low": 3100000000,
+      "high": 3730000000,
+      "targetPeriod": "2026-FY",
+      "quote": "Net income (loss) | $3,100 | $3,730 | $(90) | $(90) | $3,010 | $3,640",
+      "modelLow": 3100000000,
+      "modelHigh": 3730000000,
+      "documentType": "press_release",
+      "correctedAt": "2026-11-04T22:31:26.023Z"
+    },
+    {
       "metric": "fcf",
       "kind": "range",
       "low": 3925000000,
       "high": 4725000000,
       "targetPeriod": "2026-FY",
       "quote": "Ongoing Operations Adjusted FCFbG1 guidance ranges of $6.8 billion to $7.6 billion and $3.925 billion to $4.725 billion",
-      "modelLow": null,
-      "modelHigh": null,
+      "modelLow": 3925000000,
+      "modelHigh": 4725000000,
       "documentType": "press_release",
-      "correctedAt": "2026-11-01T00:00:00.000Z",
-      "source": "seed: headline table and outlook, checked by eye against the release",
+      "correctedAt": "2026-11-04T22:31:35.922Z",
       "previous": {
         "low": 3925000000,
         "high": 4725000000,
@@ -52,5 +63,5 @@
       "goldSnippet": "$3.925 billion to $4.725 billion"
     }
   ],
-  "updatedAt": "2026-11-01T00:00:00.000Z"
+  "updatedAt": "2026-11-04T22:31:35.926Z"
 }

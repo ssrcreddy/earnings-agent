@@ -55,6 +55,9 @@ export function checkBrief(draft: string, sheet: FactSheet): BriefCheckResult {
     else if (!cited.includes(id)) cited.push(id);
   }
 
+  // The reader never sees the pipeline: no talk of the inputs the writer was given.
+  if (/\bfact[- ]sheet\b/i.test(draft)) errors.push('mentions "the fact sheet" - write for the reader, not about the inputs');
+
   for (const re of BLOCKLIST) {
     const hit = re.exec(draft);
     if (hit) errors.push(`uses recommendation language ("${hit[0]}") - briefs state facts only`);

@@ -18,10 +18,17 @@ import { withTransaction, type AppContext } from "../context";
 import { compareGuidance, deriveQ4, priorYearPeriod, verdictFor, yoyChange } from "../services/compare";
 import { renderTemplateBrief, briefInput, writeBrief, type BriefDrafter } from "../services/briefWriter";
 import { eventStatusFromDocuments } from "../services/eventStatus";
-import { formatTargetPeriod, metricLabel, type FactSheet, type GuidanceFact, type MetricFact } from "../services/factSheet";
+import {
+  formatTargetPeriod,
+  metricLabel,
+  selectBriefMetrics,
+  type FactSheet,
+  type GuidanceFact,
+  type MetricFact,
+} from "../services/factSheet";
 import type { EventPayload } from "../queues";
 
-export const BRIEF_PROMPT_VERSION = "brief.v1";
+export const BRIEF_PROMPT_VERSION = "brief.v2";
 export const TEMPLATE_VERSION = "brief.template.v1";
 const BRIEF_INSTRUCTIONS = readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), "../llm/prompts", `${BRIEF_PROMPT_VERSION}.md`),
@@ -297,7 +304,7 @@ async function buildFactSheet(ctx: AppContext, event: EventRow, company: Company
     (m.periodType === "quarter" ? 0 : m.periodType === "ytd" ? 2000 : 4000) +
     (m.segment ? 1000 : 0) +
     VOCAB_ORDER.indexOf(m.name);
-  const sorted = [...rows].sort((a, b) => order(a) - order(b) || (a.segment ?? "").localeCompare(b.segment ?? ""));
+  const sorted = selectBriefMetrics(rows).sort((a, b) => order(a) - order(b) || (a.segment ?? "").localeCompare(b.segment ?? ""));
 
   const metricFacts: MetricFact[] = sorted.map((m, i) => {
     const py = priorRows.find((p) => p.name === m.name && p.periodType === m.periodType && p.segment === m.segment);
@@ -323,6 +330,13 @@ async function buildFactSheet(ctx: AppContext, event: EventRow, company: Company
     };
   });
 
+  // "New" is only trustworthy if earlier prints were processed; otherwise the guide may just look new.
+  const earlier = await ctx.db
+    .select({ status: earningsEvents.status })
+    .from(earningsEvents)
+    .where(and(eq(earningsEvents.companyId, company.id), lt(earningsEvents.reportDate, event.reportDate)));
+  const historyIncomplete = earlier.some((e) => !["extracted", "compared", "briefed"].includes(e.status));
+
   const guidanceFacts: GuidanceFact[] = [];
   for (const [i, g] of [...guides].sort((a, b) => VOCAB_ORDER.indexOf(a.metric) - VOCAB_ORDER.indexOf(b.metric)).entries()) {
     const prev = g.prevGuidanceId
@@ -343,6 +357,7 @@ async function buildFactSheet(ctx: AppContext, event: EventRow, company: Company
       low: numOrNull(g.low),
       high: numOrNull(g.high),
       change: g.change as GuidanceChange | null,
+      changeNote: g.change === "new" && historyIncomplete ? "first on record (earlier quarters are not processed yet)" : null,
       previous: prev
         ? { low: numOrNull(prev.row.low), high: numOrNull(prev.row.high), fiscalPeriod: prev.fiscalPeriod, quote: prev.row.quote }
         : null,

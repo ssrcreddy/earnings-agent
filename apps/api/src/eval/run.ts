@@ -14,7 +14,7 @@ import { compareGuidance } from "../services/compare";
 import { guidanceKey, metricKey, runExtraction, type ModelCall } from "../services/extraction";
 import type { GoldenCase } from "../services/golden";
 import { retrieve } from "../services/retrieval";
-import { locateQuote, valueInQuote, type ValidationContext } from "../services/validate";
+import { locateQuote, UNSIGNED_METRICS, valueInQuote, type ValidationContext } from "../services/validate";
 
 /** "Equals the hand-checked value": rounding noise only, not a 0.5% tolerance. */
 const EXACT = 1e-6;
@@ -160,7 +160,7 @@ export async function runEval(ctx: AppContext, opts: EvalOptions): Promise<EvalR
             // Citation precision: re-run the support check independently of the validator's verdict.
             checked++;
             const at = locateQuote(clean.text, m.item.quote);
-            if (at && valueInQuote(m.item.value, m.item.unit, m.item.quote, clean.text, at.start)) supported++;
+            if (at && valueInQuote(m.item.value, m.item.unit, m.item.quote, clean.text, at.start, UNSIGNED_METRICS.has(m.item.name))) supported++;
           }
           for (const v of outcome.guidance) {
             gotGuides.set(guidanceKey(v.item), { kind: v.item.kind, low: v.item.low, high: v.item.high });
@@ -199,12 +199,13 @@ export async function runEval(ctx: AppContext, opts: EvalOptions): Promise<EvalR
         const got = gotGuides.get(guidanceKey(eg));
         if (!got) {
           extracted.missing++;
+          extracted.mismatches.push(`${c.id} ${eg.metric} ${eg.targetPeriod}: not extracted`);
           continue;
         }
         const prev = eg.previous ? { id: "prev", kind: eg.previous.kind as GuidanceKind, low: eg.previous.low, high: eg.previous.high } : null;
         const computed = compareGuidance({ id: "new", ...got }, prev).change;
         if (computed === eg.expectedChange) extracted.correct++;
-        else extracted.mismatches.push(`${c.id} ${eg.metric} ${eg.targetPeriod}: expected ${eg.expectedChange}, computed ${computed}`);
+        else extracted.mismatches.push(`${c.id} ${eg.metric} ${eg.targetPeriod}: expected ${eg.expectedChange}, computed ${computed} from ${got.low} to ${got.high}`);
         if (isFalseChange(computed, eg.expectedChange)) extracted.falseChanges++;
       }
     }
